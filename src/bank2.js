@@ -1,0 +1,455 @@
+/* Still Employed: the second half of the bank. Eighteen more question types, built from src/records.js and from number
+   sets written out here so every one can be listed and checked. As in bank.js, every answer is computed from its data.
+   src/bank.test.js recomputes these with separate formulas. */
+(function (root) {
+  'use strict';
+  const inNode = typeof module !== 'undefined' && module.exports;
+  const B = inNode ? require('./bank.js') : root.SE_BANK;
+  const MORE = inNode ? require('./records.js') : root.SE_MORE;
+  const { fmt, shuffle, pickOne, MINUS, wave } = B;
+  const { kind, finish, GEN, SETS, bins, plain, VERB_CLOCK, VERB_PAY, VERB_WEIGHT, GDP, PEOPLE, EFFECTS, LOOP, REALNOM, COSTS, PHASES, NAMEIT, MICRO_ELASTIC, TYPES, MOVES, TOWNS, BOTHMOVES, PHIS, words } = B._kit;
+
+  B.VERBS.push('truefalse', 'oddone', 'order', 'match', 'blank', 'word', 'compare', 'type', 'dial', 'arrows', 'rows', 'pile', 'wave', 'frq', 'bars', 'badcell', 'label', 'ap');
+  /* Clocks are generous on purpose (teacher feedback, Nov 5, 2026). Reading time is added on top of these. */
+  Object.assign(VERB_CLOCK, { truefalse: 19, oddone: 22, order: 26, match: 30, blank: 21, word: 23, compare: 26, type: 62, dial: 46, arrows: 27, rows: 28, pile: 34, wave: 20, frq: 28, bars: 23, badcell: 50, label: 36, ap: 56 });
+  Object.assign(VERB_PAY, { truefalse: 1, oddone: 1, order: 1.5, match: 1.5, blank: 1, word: 1, compare: 1.5, type: 2.5, dial: 1.5, arrows: 1.5, rows: 1.5, pile: 2, wave: 1, frq: 1.5, bars: 1, badcell: 2, label: 1.5, ap: 2 });
+  Object.assign(VERB_WEIGHT, { truefalse: 1, oddone: 1, order: 0.9, match: 0.9, blank: 1, word: 1, compare: 1, type: 0.9, dial: 0.8, arrows: 0.9, rows: 0.9, pile: 1, wave: 0.9, frq: 0.9, bars: 0.9, badcell: 0.7, label: 0.8, ap: 0.9 });
+
+  /* adds reading time for text finish() does not know about */
+  function fin(t, extra) {
+    finish(t);
+    let n = 0;
+    (extra || []).forEach((s) => { n += words(s); });
+    t.clock = Math.round((t.clock + n * 0.35) * 10) / 10;
+    return t;
+  }
+  const byDesk = (list) => {
+    const out = {};
+    list.forEach((x) => { (out[x.d] = out[x.d] || []).push(x); });
+    return out;
+  };
+  const eachDesk = (list, prefix, verb, build) => {
+    const groups = byDesk(list);
+    Object.keys(groups).forEach((d) => kind(`${prefix}-${d}`, d, verb, groups[d], build));
+  };
+
+  /* ================= true or false ================= */
+  const TF = MORE.TF.map(([d, lvl, a, s, y]) => ({ d, lvl, a, s, y }));
+  eachDesk(TF, 'tf', 'truefalse', (x) => finish({
+    desk: x.d, verb: 'truefalse', lvl: x.lvl, order: 'TRUE OR FALSE?', text: x.s,
+    options: [{ key: 't', label: 'True', stampClass: 'go' }, { key: 'f', label: 'False', stampClass: 'no' }], answer: x.a ? 0 : 1, why: x.y,
+  }));
+
+  /* ================= fill the blank ================= */
+  const BLANKS = MORE.BLANK.map(([d, lvl, t, a, w1, w2, w3, y]) => ({ d, lvl, t, a, w: [w1, w2, w3], y }));
+  eachDesk(BLANKS, 'blank', 'blank', (x, r) => {
+    const options = shuffle(r, [x.a].concat(x.w)).map((label) => ({ label }));
+    return finish({ desk: x.d, verb: 'blank', lvl: x.lvl, order: 'FILL THE BLANK', text: x.t, options, answer: options.findIndex((o) => o.label === x.a), why: x.y });
+  });
+
+  /* ================= tap the wrong word ================= */
+  function parseWord(src) {
+    const parts = [];
+    const re = /\[([^\]>]+)(?:>([^\]]+))?\]/g;
+    let at = 0, m;
+    while ((m = re.exec(src))) {
+      if (m.index > at) parts.push({ text: src.slice(at, m.index) });
+      parts.push(m[2] ? { w: m[1], bad: true, fix: m[2] } : { w: m[1] });
+      at = m.index + m[0].length;
+    }
+    if (at < src.length) parts.push({ text: src.slice(at) });
+    return parts;
+  }
+  const WORDS = MORE.WORD.map(([d, lvl, t, y]) => ({ d, lvl, t, y }));
+  eachDesk(WORDS, 'word', 'word', (x) => {
+    const parts = parseWord(x.t);
+    const cand = parts.filter((p) => p.w);
+    const bad = cand.find((p) => p.bad);
+    return finish({
+      desk: x.d, verb: 'word', lvl: x.lvl, order: 'TAP THE WRONG WORD', text: parts.map((p) => p.w || p.text).join(''), parts,
+      options: cand.map((p) => ({ label: p.w })), answer: cand.indexOf(bad), fix: bad.fix, why: `It should say "${bad.fix}." ${x.y}`.slice(0, 140),
+    });
+  });
+
+  /* ================= AP style ================= */
+  eachDesk(MORE.AP, 'ap', 'ap', (x, r) => {
+    const options = shuffle(r, [x.a].concat(x.w)).map((label) => ({ label }));
+    return fin({ desk: x.d, verb: 'ap', lvl: x.lvl, order: 'AP STYLE QUESTION', text: x.q, options, answer: options.findIndex((o) => o.label === x.a), why: x.y }, options.map((o) => o.label));
+  });
+
+  /* ================= finish the sentence ================= */
+  eachDesk(MORE.FRQ, 'frq', 'frq', (x, r) => {
+    const blanks = x.b.map((list) => {
+      const options = shuffle(r, list);
+      return { options, answer: options.indexOf(list[0]) };
+    });
+    return fin({ desk: x.d, verb: 'frq', lvl: x.lvl, order: 'FINISH THE SENTENCE', text: x.t, blanks, why: x.y }, [x.b[0].join(' '), x.b[1].join(' ')]);
+  });
+
+  /* ================= put in order ================= */
+  eachDesk(MORE.ORDER, 'order', 'order', (x, r) => {
+    const options = shuffle(r, x.items).map((label) => ({ label }));
+    return fin({ desk: x.d, verb: 'order', lvl: x.lvl, order: 'PUT IN ORDER', ask: x.ask, options, answer: x.items.map((it) => options.findIndex((o) => o.label === it)), why: x.y }, x.items);
+  });
+  /* numbers to rank: the key comes from sorting the computed values */
+  const RANK = [
+    { id: 'urate', d: 'jobs', lvl: 2, f: 'urate', ask: 'Lowest unemployment rate to highest.', sets: [[[1000, 50], [2000, 160], [800, 48]], [[1500, 120], [500, 20], [3000, 150]], [[1200, 96], [1000, 100], [4000, 200]], [[2000, 60], [1000, 80], [2500, 125]]], label: ([lf, u]) => `${fmt.num(u)} unemployed, labor force ${fmt.num(lf)}`, inp: ([lf, u]) => ({ u, lf }), val: ([lf, u]) => u / lf, y: 'Unemployed ÷ labor force for each one. Big counts can still mean a low rate.' },
+    { id: 'infl', d: 'prices', lvl: 2, f: 'infl', ask: 'Lowest inflation rate to highest.', sets: [[[120, 126], [200, 206], [100, 104]], [[150, 159], [250, 255], [125, 130]], [[300, 309], [110, 121], [160, 168]], [[140, 147], [200, 204], [220, 231 + 11]]], label: ([o, n]) => `CPI from ${o} to ${n}`, inp: ([old, neu]) => ({ old, neu }), val: ([o, n]) => (n - o) / o, y: 'Change ÷ old CPI for each one. The biggest point rise is not always the biggest rate.' },
+    { id: 'wage', d: 'prices', lvl: 2, f: 'realwage', ask: 'Lowest real wage to highest.', sets: [[[25, 125], [18, 100], [33, 150]], [[24, 120], [26, 100], [36, 150]], [[30, 125], [21, 100], [44, 200]], [[15, 100], [27, 150], [25, 125]]], label: ([w, c]) => `${fmt.usd2(w)} when the CPI is ${c}`, inp: ([wage, cpi]) => ({ wage, cpi }), val: ([w, c]) => w / c, y: 'Wage ÷ CPI × 100 for each one.' },
+    { id: 'percap', d: 'miss', lvl: 2, f: 'percap', ask: 'Lowest GDP per capita to highest.', sets: [[[800, 40], [1200, 30], [450, 15]], [[900, 60], [600, 20], [1000, 40]], [[2000, 25], [1500, 50], [500, 25]], [[720, 12], [800, 20], [350, 35]]], label: ([g, p]) => `$${fmt.num(g)} billion, ${p} million people`, inp: ([gdpB, popM]) => ({ gdpB, popM }), val: ([g, p]) => g / p, y: 'GDP ÷ population for each one. A bigger GDP is not always a higher GDP per capita.' },
+    { id: 'real', d: 'real', lvl: 2, f: 'realgdp', ask: 'Lowest real GDP to highest.', sets: [[[1320, 110], [1000, 100], [1250, 125]], [[1500, 125], [1100, 100], [1300, 130]], [[1050, 105], [1440, 120], [1100, 110]].map((x) => x), [[880, 110], [900, 100], [1000, 125]]], label: ([n, d]) => `Nominal $${fmt.num(n)}, deflator ${d}`, inp: ([nom, def]) => ({ nom, def }), val: ([n, d]) => n / d, y: 'Nominal ÷ deflator × 100 for each one.' },
+  ];
+  RANK.forEach((spec) => {
+    const recs = spec.sets.filter((set) => new Set(set.map(spec.val)).size === set.length).map((set, i) => ({ set, k: String(i + 1), lvl: spec.lvl }));
+    kind('rank-' + spec.id, spec.d, 'order', recs, (x, r) => {
+      const shuffled = shuffle(r, x.set);
+      const options = shuffled.map((row) => ({ label: spec.label(row) }));
+      const sorted = shuffled.map((row, i) => ({ i, v: spec.val(row) })).sort((a, b) => a.v - b.v);
+      return fin({
+        desk: spec.d, verb: 'order', lvl: spec.lvl, order: 'PUT IN ORDER', ask: spec.ask, options, answer: sorted.map((s) => s.i), why: spec.y,
+        check: { f: spec.f, inputs: shuffled.map(spec.inp), dir: 'asc' },
+      }, options.map((o) => o.label));
+    });
+  });
+
+  /* ================= set the arrows ================= */
+  const arrowTask = (d, lvl, t, rows, y) => fin({ desk: d, verb: 'arrows', lvl, order: 'SET THE ARROWS', text: t, rows: rows.map(([label, answer]) => ({ label, answer })), why: y }, rows.map((row) => row[0]));
+  eachDesk(MORE.ARROWS, 'arrows', 'arrows', (x) => arrowTask(x.d, x.lvl, x.t, x.rows, x.y));
+  const dirOf = (a, b) => (Math.abs(a - b) < 1e-9 ? 'same' : b > a ? 'up' : 'down');
+  kind('arrows-move', 'jobs', 'arrows', MOVES.map((m) => Object.assign({}, m)), (m) => {
+    const c = TOWNS[0], after = Object.assign({}, c);
+    if (m.from !== m.to) { after[m.from]--; after[m.to]++; }
+    const rate = (x) => x.u / (x.e + x.u), part = (x) => (x.e + x.u) / (x.e + x.u + x.n);
+    return arrowTask('jobs', m.lvl, m.t, [['Unemployment rate', dirOf(rate(c), rate(after))], ['LFPR', dirOf(part(c), part(after))]], m.y);
+  });
+  kind('arrows-both', 'real', 'arrows', BOTHMOVES.map(([q, p], i) => ({ q, p, k: String(i + 1), lvl: q < 0 ? 3 : 2 })), (x) => {
+    const qT = x.q === 0 ? 'Output does not change.' : x.q > 0 ? `Output rises ${x.q}%.` : `Output falls ${-x.q}%.`;
+    const pT = x.p === 0 ? 'Prices do not change.' : `Prices rise ${x.p}%.`;
+    return arrowTask('real', x.lvl, `${qT} ${pT}`, [['Nominal GDP', dirOf(0, x.q + x.p)], ['Real GDP', dirOf(0, x.q)], ['GDP deflator', dirOf(0, x.p)]], 'Real GDP follows output. The deflator follows prices. Nominal GDP follows both.');
+  });
+
+  /* ================= match them ================= */
+  const combos = (n, want) => {
+    const out = [];
+    const walk = (start, picked) => {
+      if (picked.length === 3) { out.push(picked); return; }
+      for (let i = start; i < n; i++) walk(i + 1, picked.concat(i));
+    };
+    walk(0, []);
+    return out.slice(0, want);
+  };
+  const matchRecs = [];
+  MORE.MATCH.forEach((m) => combos(m.pairs.length, 6).forEach((pick, i) => matchRecs.push({ d: m.d, lvl: m.lvl, ask: m.ask, y: m.y, pairs: pick.map((p) => m.pairs[p]), k: `${m.k}${i}` })));
+  eachDesk(matchRecs, 'match', 'match', (x, r) => {
+    const left = shuffle(r, x.pairs.map((p) => p[0]));
+    const right = shuffle(r, x.pairs.map((p) => p[1]));
+    if (left.every((l, i) => x.pairs.find((p) => p[0] === l)[1] === right[i])) right.push(right.shift());
+    const answer = left.map((l) => right.indexOf(x.pairs.find((p) => p[0] === l)[1]));
+    return fin({ desk: x.d, verb: 'match', lvl: x.lvl, order: 'MATCH THEM', ask: x.ask, left, right, answer, why: x.y }, left.concat(right));
+  });
+
+  /* ================= which is bigger? two cards, one key, computed ================= */
+  const COMPARES = [
+    {
+      id: 'wage', d: 'prices', lvl: 2, f: 'realwage', order: 'WHICH PAY BUYS MORE?', ask: 'Compare what the pay can buy.', a: 'Job A', b: 'Job B', inp: ([wage, cpi]) => ({ wage, cpi }), val: ([w, c]) => w / c * 100,
+      rows: ([w, c]) => [['Wage', fmt.usd2(w)], ['CPI', c]], res: (v) => `Real wage ${fmt.usd2(v)}`, y: 'Real wage = wage ÷ CPI × 100. The bigger paycheck may buy less.',
+      sets: [[[21, 100], [25, 125]], [[18, 120], [21, 150]], [[30, 120], [33, 150]], [[16, 100], [20, 130]], [[27, 135], [24, 100]], [[22, 110], [27, 150]], [[40, 160], [28, 100]], [[33, 110], [36, 125]], [[15, 100], [25, 200]], [[26, 130], [18, 100]], [[50, 200], [20, 100]], [[35, 140], [24, 100]]],
+    },
+    {
+      id: 'urate', d: 'jobs', lvl: 2, f: 'urate', order: 'WHICH HAS THE HIGHER RATE?', ask: 'Compare the unemployment rates.', a: 'Town A', b: 'Town B', inp: ([u, lf]) => ({ u, lf }), val: ([u, lf]) => u / lf * 100,
+      rows: ([u, lf]) => [['Unemployed', fmt.num(u)], ['Labor force', fmt.num(lf)]], res: (v) => `Rate ${fmt.pct(v)}`, y: 'Unemployed ÷ labor force. A bigger count can still mean a lower rate.',
+      sets: [[[50, 1000], [120, 2000]], [[100, 2500], [40, 800]], [[60, 1500], [30, 500]], [[200, 5000], [90, 1500]], [[80, 1000], [150, 2500]], [[300, 4000], [70, 1000]], [[45, 900], [100, 1600]], [[160, 2000], [90, 1000]], [[250, 5000], [60, 800]], [[35, 500], [140, 2800]]],
+    },
+    {
+      id: 'lfpr', d: 'jobs', lvl: 2, f: 'lfpr', order: 'WHICH HAS THE HIGHER LFPR?', ask: 'Compare the labor force participation rates.', a: 'Town A', b: 'Town B', inp: ([lf, adults]) => ({ lf, adults }), val: ([lf, a]) => lf / a * 100,
+      rows: ([lf, a]) => [['Labor force', fmt.num(lf)], ['Adults', fmt.num(a)]], res: (v) => `LFPR ${fmt.pct(v)}`, y: 'Labor force ÷ adults. A bigger labor force can still mean a lower rate.',
+      sets: [[[600, 1000], [1300, 2000]], [[1500, 2500], [700, 1000]], [[900, 1500], [1000, 1600]], [[2400, 4000], [650, 1000]], [[800, 1000], [1400, 2000]], [[1100, 2000], [600, 1000]], [[1800, 3000], [480, 800]].map((x) => x), [[750, 1000], [2800, 4000]]],
+    },
+    {
+      id: 'infl', d: 'prices', lvl: 2, f: 'infl', order: 'WHICH HAS MORE INFLATION?', ask: 'Compare the inflation rates.', a: 'Country A', b: 'Country B', inp: ([old, neu]) => ({ old, neu }), val: ([o, n]) => (n - o) / o * 100,
+      rows: ([o, n]) => [['CPI last year', o], ['CPI this year', n]], res: (v) => `Inflation ${fmt.pct(v)}`, y: 'Change ÷ old CPI. A bigger point rise can still be a lower rate.',
+      sets: [[[120, 126], [200, 208]], [[100, 104], [250, 255]], [[150, 156], [125, 135]], [[300, 309], [110, 115.5]], [[160, 168], [240, 247.2]], [[110, 121], [200, 216]], [[140, 147], [220, 228.8]], [[130, 133.9], [180, 189]], [[100, 103], [300, 306]], [[175, 182], [125, 135]]],
+    },
+    {
+      id: 'percap', d: 'miss', lvl: 2, f: 'percap', order: 'WHICH HAS MORE PER PERSON?', ask: 'Compare GDP per capita.', a: 'Country A', b: 'Country B', inp: ([gdpB, popM]) => ({ gdpB, popM }), val: ([g, p]) => g * 1e9 / (p * 1e6),
+      rows: ([g, p]) => [['GDP', `$${fmt.num(g)} billion`], ['Population', `${p} million`]], res: (v) => `${fmt.usd(v)} per person`, y: 'GDP ÷ population. A bigger GDP can still mean less per person.',
+      sets: [[[800, 20], [1200, 40]], [[900, 30], [600, 15]], [[1500, 60], [500, 10]], [[2000, 50], [750, 15]], [[450, 15], [1000, 20]], [[3000, 100], [700, 20]], [[1800, 60], [400, 10]], [[640, 16], [1500, 50]], [[720, 24], [1000, 25]], [[2500, 50], [900, 30]]],
+    },
+    {
+      id: 'real', d: 'real', lvl: 2, f: 'realgdp', order: 'WHICH PRODUCED MORE?', ask: 'Compare real GDP, in billions of dollars.', a: 'Country A', b: 'Country B', inp: ([nom, def]) => ({ nom, def }), val: ([n, d]) => n / d * 100,
+      rows: ([n, d]) => [['Nominal GDP', fmt.num(n)], ['Deflator', d]], res: (v) => `Real GDP ${fmt.num(v)}`, y: 'Nominal ÷ deflator × 100. Higher prices can make nominal GDP look bigger.',
+      sets: [[[1200, 120], [1100, 100]], [[1320, 110], [1500, 125]], [[1050, 105], [1000, 125]], [[990, 110], [1000, 125]], [[1440, 120], [1300, 100]], [[880, 110], [900, 100]], [[1650, 150], [1200, 100]], [[1260, 105], [1500, 125]], [[1100, 110], [1200, 150]], [[2200, 110], [2500, 125]].map((x) => x).slice(0, 2)],
+    },
+    {
+      id: 'rate', d: 'costs', lvl: 2, f: 'realrate', order: 'WHICH REAL RATE IS HIGHER?', ask: 'Two bank loans. Compare the real interest rates.', a: 'Loan A', b: 'Loan B', inp: ([i, pi]) => ({ i, pi }), val: ([i, pi]) => i - pi,
+      rows: ([i, pi]) => [['Nominal rate', fmt.pct(i)], ['Inflation', fmt.pct(pi)]], res: (v) => `Real rate ${fmt.pct(v)}`, y: 'Real rate = nominal rate minus inflation. A higher stated rate can be a lower real rate.',
+      sets: [[[8, 5], [5, 1]], [[9, 7], [6, 2]], [[4, 1], [7, 6]], [[10, 9], [3, 1]], [[6, 8], [4, 3]], [[5, 2], [8, 6]], [[12, 10], [6, 3]], [[7, 3], [9, 6]], [[3, 4], [2, 2]], [[6, 1], [11, 8]]],
+    },
+    {
+      id: 'gap', d: 'cycle', lvl: 3, want: 'lower', f: 'gappct', order: 'WHICH GAP IS MORE NEGATIVE?', ask: 'Compare the output gaps as a percent of potential.', a: 'Country A', b: 'Country B', inp: ([actual, potential]) => ({ actual, potential }), val: ([a, p]) => (a - p) / p * 100,
+      rows: ([a, p]) => [['Actual real GDP', fmt.num(a)], ['Potential real GDP', fmt.num(p)]], res: (v) => `Gap ${fmt.pct(v)}`, y: 'Divide the gap by potential. A bigger dollar gap can be a smaller percent.',
+      sets: [[[1140, 1200], [485, 500]], [[950, 1000], [1960, 2000]], [[380, 400], [2850, 3000]].map((x) => x).slice(0, 2).concat([]), [[780, 800], [1900, 2000]], [[1470, 1500], [576, 600]], [[2400, 2500], [475, 500]], [[640, 700], [1900, 2000]], [[864, 900], [970, 1000]]],
+    },
+    {
+      id: 'cyc', d: 'cycle', lvl: 2, f: 'cyclical', order: 'MORE CYCLICAL UNEMPLOYMENT?', ask: 'Which has more cyclical unemployment?', a: 'Country A', b: 'Country B', inp: ([actual, natural]) => ({ actual, natural }), val: ([a, n]) => a - n,
+      rows: ([a, n]) => [['Actual rate', fmt.pct(a)], ['Natural rate', fmt.pct(n)]], res: (v) => `Cyclical ${fmt.pct(v)}`, y: 'Cyclical = actual minus natural. A higher actual rate can be less cyclical.',
+      sets: [[[7, 5], [8, 6.5]], [[6, 4], [9, 8]], [[5.5, 5], [6, 4.5]], [[8, 6], [7, 4.5]], [[4.5, 4], [5, 5]], [[9, 7.5], [6.5, 4]], [[6, 5.5], [5, 4]], [[7.5, 4.5], [8, 6]]],
+    },
+    {
+      id: 'index', d: 'prices', lvl: 2, f: 'cpi', order: 'WHOSE PRICES ROSE MORE?', ask: 'Compare each price index with its base year.', a: 'Country A', b: 'Country B', inp: ([base, now]) => ({ now, base }), val: ([b, n]) => n / b * 100,
+      rows: ([b, n]) => [['Basket, base year', fmt.usd2(b)], ['Basket now', fmt.usd2(n)]], res: (v) => `Index ${fmt.idx(v)}`, y: 'Cost now ÷ cost in the base year × 100. A bigger dollar rise can be a smaller percent.',
+      sets: [[[50, 60], [80, 92]], [[40, 46], [100, 110]], [[20, 25], [200, 230]], [[60, 66], [30, 36]], [[120, 150], [80, 88]], [[75, 90], [250, 275]], [[160, 200], [50, 55]], [[100, 125], [40, 48]]],
+    },
+  ];
+  COMPARES.forEach((spec) => {
+    const recs = spec.sets.filter((pair) => pair.length === 2 && Math.abs(spec.val(pair[0]) - spec.val(pair[1])) > 1e-6).map((pair, i) => ({ pair, k: String(i + 1), lvl: spec.lvl }));
+    kind('cmp-' + spec.id, spec.d, 'compare', recs, (x) => {
+      const cards = x.pair.map((set, i) => ({ title: i ? spec.b : spec.a, rows: set_rows(spec.rows(set)), result: spec.res(spec.val(set)), calc: { f: spec.f, in: spec.inp(set), value: spec.val(set) } }));
+      const vals = cards.map((c) => c.calc.value);
+      const want = spec.want || 'higher';
+      const answer = want === 'lower' ? (vals[0] < vals[1] ? 0 : 1) : (vals[0] > vals[1] ? 0 : 1);
+      return fin({ desk: spec.d, verb: 'compare', lvl: spec.lvl, order: spec.order, ask: spec.ask, cards, want, options: cards.map((c) => ({ label: c.title })), answer, why: spec.y }, [spec.y.split('.')[0]]);
+    });
+  });
+  function set_rows(rows) { return rows.map((row) => [String(row[0]), String(row[1])]); }
+
+  /* ================= type the answer: math tasks with a keypad instead of four choices ================= */
+  const TOL = { pct: 0.1, idx: 0.1, usd2: 0.02, usd: 0.5, bil: 0.5, num: 0.5 };
+  const UNIT = { pct: ['', '%'], idx: ['', ''], usd2: ['$', ''], usd: ['$', ''], bil: ['$', ' billion'], num: ['', ''] };
+  function toType(task) {
+    const name = task.calc.fmt, tol = TOL[name];
+    const value = task.calc.value;
+    const wrongVals = task.options.filter((o, i) => i !== task.answer && !/Check the arithmetic/.test(o.why) && Math.abs(o.v - value) > tol).map((o) => ({ v: o.v, why: o.why }));
+    const oneDecimal = name === 'pct' || name === 'idx';
+    const t = Object.assign({}, task, { verb: 'type', ask: `${task.ask ? task.ask.replace(/([^.?!])$/, '$1.') + ' ' : ''}Type the answer${oneDecimal ? ', to one decimal' : ''}.`, tol, unit: UNIT[name], wrongVals });
+    delete t.options; delete t.answer;
+    return finish(t);
+  }
+  [
+    ['urate', 'urate', SETS.urate, 'jobs', 2], ['lfpr', 'lfpr', SETS.urate, 'jobs', 2], ['lf', 'lf', SETS.urate, 'jobs', 1],
+    ['gdp', 'gdp', SETS.gdp, 'gdp', 2], ['xn', 'xn', SETS.xn, 'gdp', 2], ['income', 'income', SETS.income, 'gdp', 1], ['va', 'valueadded', SETS.chain, 'gdp', 2],
+    ['percap', 'percap', SETS.percap, 'miss', 2], ['cpi', 'cpi', SETS.cpi, 'prices', 2], ['infl', 'infl', SETS.infl, 'prices', 2], ['wage', 'realwage', SETS.wage, 'prices', 2], ['convert', 'convert', SETS.convert, 'prices', 3], ['basket', 'basket', SETS.basket, 'prices', 1],
+    ['real', 'realgdp', SETS.real, 'real', 2], ['def', 'deflator', SETS.real, 'real', 2], ['nom', 'nominal', SETS.real, 'real', 3], ['growth', 'growth', SETS.growth, 'real', 3], ['onegood', 'onegood', SETS.onegood, 'real', 2],
+    ['cyc', 'cyclical', SETS.cyclical, 'jobs', 2], ['nat', 'natural', SETS.natural, 'jobs', 2], ['gap', 'gap', SETS.gap, 'cycle', 3], ['rate', 'realrate', SETS.realrate, 'costs', 2], ['wagechange', 'wagechange', SETS.wagechange, 'prices', 2],
+  ].forEach(([id, gen, sets, desk, lvl]) => {
+    kind('type-' + id, desk, 'type', sets, (set, r) => toType(GEN[gen](set, r, lvl)), { lvl });
+  });
+
+  /* ================= set the dial: only where the answer lands on a step ================= */
+  const DIALS = [
+    { id: 'urate', gen: 'urate', sets: SETS.urate, d: 'jobs', min: 0, max: 15, step: 0.5, pre: '', suf: '%' },
+    { id: 'lfpr', gen: 'lfpr', sets: SETS.urate, d: 'jobs', min: 40, max: 90, step: 2.5, pre: '', suf: '%' },
+    { id: 'infl', gen: 'infl', sets: SETS.infl, d: 'prices', min: 0, max: 15, step: 0.5, pre: '', suf: '%' },
+    { id: 'cpi', gen: 'cpi', sets: SETS.cpi, d: 'prices', min: 100, max: 150, step: 2.5, pre: '', suf: '' },
+    { id: 'deflator', gen: 'deflator', sets: SETS.real, d: 'real', min: 100, max: 130, step: 5, pre: '', suf: '' },
+    { id: 'wage', gen: 'realwage', sets: SETS.wage, d: 'prices', min: 0, max: 40, step: 1, pre: '$', suf: '' },
+    { id: 'cyc', gen: 'cyclical', sets: SETS.cyclical, d: 'cycle', min: -3, max: 5, step: 0.5, pre: '', suf: '%' },
+    { id: 'nat', gen: 'natural', sets: SETS.natural, d: 'jobs', min: 0, max: 8, step: 0.5, pre: '', suf: '%' },
+    { id: 'rate', gen: 'realrate', sets: SETS.realrate, d: 'costs', min: -5, max: 10, step: 1, pre: '', suf: '%' },
+    { id: 'gap', gen: 'gap', sets: SETS.gap, d: 'cycle', min: -8, max: 8, step: 1, pre: '', suf: '%' },
+  ];
+  DIALS.forEach((sp) => {
+    const r0 = B.rng(1);
+    const onStep = (v) => v >= sp.min && v <= sp.max && Math.abs((v - sp.min) / sp.step - Math.round((v - sp.min) / sp.step)) < 1e-6;
+    const recs = sp.sets.filter((set) => onStep(GEN[sp.gen](set, r0, 2).calc.value));
+    kind('dial-' + sp.id, sp.d, 'dial', recs, (set, r) => {
+      const task = GEN[sp.gen](set, r, 2);
+      const v = task.calc.value;
+      const mid = sp.min + Math.round((sp.max - sp.min) / sp.step / 2) * sp.step;
+      const start = Math.abs(mid - v) > sp.step / 2 ? mid : sp.min;
+      const t = Object.assign({}, task, { verb: 'dial', ask: `${task.ask ? task.ask.replace(/\.?$/, '.') + ' ' : ''}Drag the dial to the answer.`, tol: sp.step / 2, dial: { min: sp.min, max: sp.max, step: sp.step, start, pre: sp.pre, suf: sp.suf } });
+      delete t.options; delete t.answer;
+      return finish(t);
+    }, { lvl: 2 });
+  });
+
+  /* ================= tap the row ================= */
+  const YEARS = ['Year 1', 'Year 2', 'Year 3', 'Year 4'];
+  function rowsTask(o) {
+    return fin({
+      desk: o.d, verb: o.verb || 'rows', lvl: o.lvl, order: o.order, ask: o.ask, columns: o.columns, cells: o.cells,
+      options: o.cells.map((row) => ({ label: row[0] })), answer: o.answer, check: o.check, why: o.why, work: o.work,
+    }, o.ask ? [] : []);
+  }
+  const first = (flags) => flags.findIndex(Boolean);
+  const rowKind = (id, d, lvl, list, build) => kind('rows-' + id, d, 'rows', list.map((x, i) => Object.assign({ k: String(i + 1), lvl }, x)), build);
+  const REALS = [
+    { real: [1000, 1050, 1020, 1080], def: [100, 110, 120, 125] }, { real: [800, 840, 860, 830], def: [100, 105, 110, 120] }, { real: [500, 480, 500, 520], def: [100, 105, 110, 115] }, { real: [1200, 1260, 1320, 1280], def: [100, 110, 115, 125] },
+    { real: [600, 630, 610, 640], def: [100, 110, 120, 125] }, { real: [400, 420, 400, 440], def: [100, 105, 110, 125] }, { real: [2000, 2100, 2050, 2200], def: [100, 110, 120, 125] }, { real: [1000, 950, 1000, 1050], def: [100, 110, 120, 130] },
+  ];
+  rowKind('realfell', 'real', 3, REALS, (x) => {
+    const nominal = x.real.map((v, i) => v * x.def[i] / 100);
+    const answer = first(x.real.map((v, i) => i > 0 && v < x.real[i - 1]));
+    return rowsTask({ d: 'real', lvl: 3, order: 'TAP THE YEAR REAL GDP FELL', ask: 'Nominal GDP is in billions of dollars.', columns: ['Year', 'Nominal GDP', 'Deflator'], cells: YEARS.map((y, i) => [y, fmt.num(nominal[i]), String(x.def[i])]), answer, check: { kind: 'realfell', nominal, deflator: x.def }, why: 'Divide nominal by the deflator, times 100, for each year. Nominal can rise while real falls.', work: `Real GDP: ${x.real.map((v, i) => `Year ${i + 1} ${fmt.num(v)}`).join(', ')}` });
+  });
+  rowKind('baseyear', 'real', 1, [[95, 100, 104, 110], [90, 95, 100, 107], [100, 103, 108, 112], [92, 96, 100, 105], [85, 92, 100, 108]].map((d) => ({ d })), (x) => rowsTask({ d: 'real', lvl: 1, order: 'TAP THE BASE YEAR', columns: ['Year', 'GDP deflator'], cells: YEARS.map((y, i) => [y, String(x.d[i])]), answer: x.d.indexOf(100), check: { kind: 'baseyear', deflator: x.d }, why: 'The deflator equals 100 in the base year.' }));
+  rowKind('equal', 'real', 2, [{ n: [950, 1000, 1100, 1210], r: [1000, 1000, 1050, 1100] }, { n: [800, 900, 1000, 1100], r: [900, 950, 1000, 1050] }, { n: [1000, 1100, 1210, 1300], r: [1000, 1050, 1100, 1150] }, { n: [700, 760, 800, 880], r: [760, 780, 790, 800].map((v, i) => [800, 800, 800, 800][i]) }, { n: [600, 640, 700, 770], r: [660, 680, 700, 720] }].filter((x) => x.n.filter((v, i) => v === x.r[i]).length === 1), (x) => rowsTask({ d: 'real', lvl: 2, order: 'TAP THE BASE YEAR', ask: 'Both are in billions of dollars.', columns: ['Year', 'Nominal GDP', 'Real GDP'], cells: YEARS.map((y, i) => [y, fmt.num(x.n[i]), fmt.num(x.r[i])]), answer: x.n.findIndex((v, i) => v === x.r[i]), check: { kind: 'equal', nominal: x.n, real: x.r }, why: 'Nominal GDP equals real GDP in the base year.' }));
+  const rates = (c) => c.map((v, i) => (i ? (v - c[i - 1]) / c[i - 1] * 100 : null));
+  rowKind('highinfl', 'prices', 2, [[100, 105, 112, 114], [120, 126, 128, 140], [100, 110, 112, 115], [150, 156, 165, 168], [200, 204, 220, 226], [80, 84, 92, 94], [110, 121, 124, 126], [160, 164, 168, 180]].map((cpi) => ({ cpi })), (x) => {
+    const r = rates(x.cpi), m = Math.max(...r.slice(1));
+    return rowsTask({ d: 'prices', lvl: 2, order: 'TAP THE HIGHEST INFLATION', ask: 'Which year had the highest inflation rate?', columns: ['Year', 'CPI'], cells: YEARS.map((y, i) => [y, String(x.cpi[i])]), answer: r.indexOf(m), check: { kind: 'highinfl', cpi: x.cpi }, why: 'Divide each change by the CPI before it.', work: `Inflation: ${r.slice(1).map((v, i) => `Year ${i + 2} ${fmt.pct(v)}`).join(', ')}` });
+  });
+  rowKind('deflation', 'prices', 1, [[120, 124, 122, 126], [100, 103, 101, 104], [150, 148, 152, 155], [200, 205, 210, 207], [130, 134, 132, 136], [90, 92, 95, 94], [110, 108, 111, 114], [175, 180, 178, 183]].map((cpi) => ({ cpi })), (x) => rowsTask({ d: 'prices', lvl: 1, order: 'TAP THE YEAR OF DEFLATION', columns: ['Year', 'CPI'], cells: YEARS.map((y, i) => [y, String(x.cpi[i])]), answer: first(x.cpi.map((v, i) => i > 0 && v < x.cpi[i - 1])), check: { kind: 'deflation', cpi: x.cpi }, why: 'Deflation is a fall in the price level, so the CPI went down.' }));
+  rowKind('disinflation', 'prices', 3, [[100, 110, 114, 120], [100, 102, 110, 112], [120, 130, 135, 145], [100, 101, 103, 104], [200, 210, 213, 225], [160, 164, 172, 175], [80, 88, 90, 99], [100, 104, 110, 113]].map((cpi) => ({ cpi })), (x) => {
+    const r = rates(x.cpi);
+    return rowsTask({ d: 'prices', lvl: 3, order: 'TAP THE YEAR OF DISINFLATION', ask: 'Prices rose, but more slowly than the year before.', columns: ['Year', 'CPI'], cells: YEARS.map((y, i) => [y, String(x.cpi[i])]), answer: first(r.map((v, i) => i > 1 && v > 0 && v < r[i - 1])), check: { kind: 'disinflation', cpi: x.cpi }, why: 'Prices still rose that year, just more slowly.', work: `Inflation: ${r.slice(1).map((v, i) => `Year ${i + 2} ${fmt.pct(v)}`).join(', ')}` });
+  });
+  rowKind('highu', 'jobs', 2, [{ e: [950, 1880, 720, 1440], u: [50, 120, 80, 60] }, { e: [1150, 2300, 900, 1800], u: [50, 200, 100, 100] }, { e: [980, 1900, 3700, 760], u: [20, 100, 300, 40] }, { e: [1600, 640, 3200, 960], u: [100, 60, 100, 40] }, { e: [2850, 1425, 700, 5600], u: [150, 75, 100, 400] }, { e: [460, 1840, 920, 2760], u: [40, 100, 30, 120] }], (x) => {
+    const r = x.e.map((e, i) => x.u[i] / (e + x.u[i]) * 100), m = Math.max(...r);
+    return rowsTask({ d: 'jobs', lvl: 2, order: 'TAP THE HIGHEST RATE', ask: 'Which town has the highest unemployment rate?', columns: ['Town', 'Employed', 'Unemployed'], cells: ['Town A', 'Town B', 'Town C', 'Town D'].map((y, i) => [y, fmt.num(x.e[i]), fmt.num(x.u[i])]), answer: r.indexOf(m), check: { kind: 'highu', e: x.e, u: x.u }, why: 'Unemployed ÷ (employed + unemployed). The most unemployed is not always the highest rate.', work: `Rates: ${r.map((v, i) => `Town ${'ABCD'[i]} ${fmt.pct(v)}`).join(', ')}` });
+  });
+  const gapRows = [
+    ['negative', 'TAP THE NEGATIVE GAP YEAR', [[4.5, [4, 4.5, 6, 3.5]], [5, [5, 4, 7, 4.5]], [4, [6, 4, 3.5, 3]], [5.5, [5, 5.5, 4.5, 8]], [4.5, [3.5, 7, 4.5, 4]]], 'Unemployment above the natural rate means real GDP is below potential.'],
+    ['positive', 'TAP THE POSITIVE GAP YEAR', [[4.5, [4.5, 5, 6, 4]], [5, [6, 4, 5, 7]], [4, [3, 4, 5, 6]], [5.5, [6, 5.5, 5, 7]], [4.5, [5, 6, 3.5, 4.5]]], 'Unemployment below the natural rate means real GDP is above potential.'],
+    ['atnatural', 'TAP THE ZERO GAP YEAR', [[4.5, [5, 4.5, 3.5, 6]], [5, [6, 4, 5, 7]], [4, [3, 5, 6, 4]], [5.5, [5.5, 4.5, 6.5, 7]], [4.5, [3, 6, 4.5, 5]]], 'At the natural rate, real GDP equals potential.'],
+  ];
+  gapRows.forEach(([id, order, sets, y]) => rowKind(id, 'cycle', 2, sets.map(([n, u]) => ({ n, u })), (x) => {
+    const flags = x.u.map((v) => (id === 'negative' ? v > x.n : id === 'positive' ? v < x.n : v === x.n));
+    return rowsTask({ d: 'cycle', lvl: 2, order, ask: `The natural rate is ${fmt.pct(x.n)}.`, columns: ['Year', 'Unemployment'], cells: YEARS.map((yr, i) => [yr, fmt.pct(x.u[i])]), answer: first(flags), check: { kind: id, u: x.u, natural: x.n }, why: y });
+  }));
+  rowKind('peak', 'cycle', 1, [[900, 960, 1000, 950], [1000, 1100, 1050, 1020], [700, 780, 760, 720], [500, 520, 560, 540], [1200, 1300, 1250, 1150]].map((real) => ({ real })), (x) => rowsTask({ d: 'cycle', lvl: 1, order: 'TAP THE PEAK', ask: 'Real GDP over four years, in billions of dollars.', columns: ['Year', 'Real GDP'], cells: YEARS.map((y, i) => [y, fmt.num(x.real[i])]), answer: x.real.indexOf(Math.max(...x.real)), check: { kind: 'peak', real: x.real }, why: 'The peak is the highest point. Real GDP falls after it.' }));
+  rowKind('trough', 'cycle', 1, [[1000, 950, 900, 960], [1100, 1000, 1050, 1150], [900, 850, 800, 870], [600, 560, 580, 620], [1300, 1200, 1150, 1250]].map((real) => ({ real })), (x) => rowsTask({ d: 'cycle', lvl: 1, order: 'TAP THE TROUGH', ask: 'Real GDP over four years, in billions of dollars.', columns: ['Year', 'Real GDP'], cells: YEARS.map((y, i) => [y, fmt.num(x.real[i])]), answer: x.real.indexOf(Math.min(...x.real)), check: { kind: 'trough', real: x.real }, why: 'The trough is the lowest point. Real GDP rises after it.' }));
+
+  /* ================= read the bars ================= */
+  function barsTask(o) {
+    return fin({ desk: o.d, verb: 'bars', lvl: o.lvl, order: o.order, ask: o.ask, bars: o.vals.map((v, i) => ({ label: YEARS[i], v })), line: o.line, suf: o.suf, lineLabel: o.lineLabel, options: YEARS.map((label) => ({ label })), answer: o.answer, check: o.check, why: o.why });
+  }
+  const barKind = (id, d, lvl, list, build) => kind('bars-' + id, d, 'bars', list.map((x, i) => Object.assign({ k: String(i + 1), lvl }, x)), build);
+  barKind('contraction', 'cycle', 1, [[2, 3, -1, 2], [3, -2, 1, 2], [1, 2, 3, -1], [-1, 2, 3, 2], [2, -3, 1, 3], [4, 2, -1, 1], [3, 1, 2, -2], [2, 2.5, -0.5, 1]].map((v) => ({ v })), (x) => barsTask({ d: 'cycle', lvl: 1, order: 'TAP THE CONTRACTION YEAR', ask: 'Each bar is growth in real GDP.', vals: x.v, suf: '%', answer: x.v.findIndex((g) => g < 0), check: { kind: 'contraction', growth: x.v }, why: 'Negative growth means real GDP fell.' }));
+  barKind('deflation', 'prices', 1, [[2, 3, -1, 1], [1, -1, 2, 3], [3, 2, 1, -1], [-2, 1, 2, 3], [2, -0.5, 1, 2], [4, 3, -1, 2]].map((v) => ({ v })), (x) => barsTask({ d: 'prices', lvl: 1, order: 'TAP THE DEFLATION YEAR', ask: 'Each bar is the inflation rate.', vals: x.v, suf: '%', answer: x.v.findIndex((g) => g < 0), check: { kind: 'deflationbar', rate: x.v }, why: 'A negative inflation rate means the price level fell.' }));
+  barKind('disinflation', 'prices', 2, [[2, 5, 3, 4], [1, 4, 6, 2], [3, 4, 2, 5], [2, 3, 5, 1], [1, 6, 2, 3], [2, 7, 3, 8]].map((v) => ({ v })), (x) => barsTask({ d: 'prices', lvl: 2, order: 'TAP THE DISINFLATION YEAR', ask: 'Each bar is the inflation rate. Disinflation: the rate falls but stays above zero.', vals: x.v, suf: '%', answer: first(x.v.map((g, i) => i > 0 && g > 0 && g < x.v[i - 1])), check: { kind: 'disinflationbar', rate: x.v }, why: 'The rate fell but stayed above zero. Prices still rose, just more slowly.' }));
+  barKind('negative', 'cycle', 2, [[5, [4, 4.5, 6, 3.5]], [4.5, [4, 7, 3, 4]], [5, [5, 3, 4, 8]], [4, [6, 3, 4, 2]], [6, [5, 4, 7, 6]], [5, [4, 8, 5, 3]]].map(([n, v]) => ({ n, v })), (x) => barsTask({ d: 'cycle', lvl: 2, order: 'TAP THE NEGATIVE GAP YEAR', ask: 'Each bar is the unemployment rate. The line is the natural rate.', vals: x.v, suf: '%', line: x.n, lineLabel: 'Natural rate', answer: x.v.findIndex((u) => u > x.n), check: { kind: 'negativebar', rate: x.v, natural: x.n }, why: 'Unemployment above the natural rate means real GDP is below potential.' }));
+  barKind('positive', 'cycle', 2, [[5, [6, 4, 7, 5]], [4.5, [5, 6, 4, 7]], [5, [3.5, 5, 6, 8]], [6, [7, 6, 8, 5]], [4, [5, 4, 3, 6]], [5, [5, 7, 6, 4]]].map(([n, v]) => ({ n, v })), (x) => barsTask({ d: 'cycle', lvl: 2, order: 'TAP THE POSITIVE GAP YEAR', ask: 'Each bar is the unemployment rate. The line is the natural rate.', vals: x.v, suf: '%', line: x.n, lineLabel: 'Natural rate', answer: x.v.findIndex((u) => u < x.n), check: { kind: 'positivebar', rate: x.v, natural: x.n }, why: 'Unemployment below the natural rate means real GDP is above potential.' }));
+  barKind('base', 'prices', 1, [[95, 100, 106, 110], [88, 94, 100, 105], [100, 104, 109, 115], [90, 95, 98, 100], [92, 100, 103, 108]].map((v) => ({ v })), (x) => barsTask({ d: 'prices', lvl: 1, order: 'TAP THE BASE YEAR', ask: 'Each bar is the price index.', vals: x.v, suf: '', answer: x.v.indexOf(100), check: { kind: 'basebar', rate: x.v }, why: 'The price index equals 100 in the base year.' }));
+
+  /* ================= find the bad number ================= */
+  const BADS = [
+    { id: 'urate', d: 'jobs', f: 'urate', cols: ['Unemployed', 'Labor force', 'Rate'], sets: [[60, 1200], [40, 800], [100, 2500], [150, 2500], [80, 1000], [120, 1500], [50, 1000], [240, 4000]], inp: ([u, lf]) => ({ u, lf }), val: ([u, lf]) => u / lf * 100, bad: ([u, lf]) => u / (lf - u) * 100, show: fmt.pct, cells: ([u, lf]) => [fmt.num(u), fmt.num(lf)], y: 'Unemployment rate = unemployed ÷ labor force × 100.', tol: 0.06 },
+    { id: 'lfpr', d: 'jobs', f: 'lfpr', cols: ['Labor force', 'Adults', 'LFPR'], sets: [[600, 1000], [1300, 2000], [900, 1500], [1500, 2500], [700, 1000], [2400, 4000], [800, 1000], [1000, 1600]], inp: ([lf, adults]) => ({ lf, adults }), val: ([lf, a]) => lf / a * 100, bad: ([lf, a]) => (a - lf) / a * 100, show: fmt.pct, cells: ([lf, a]) => [fmt.num(lf), fmt.num(a)], y: 'LFPR = labor force ÷ adults × 100.', tol: 0.06 },
+    { id: 'cpi', d: 'prices', f: 'cpi', cols: ['Base cost', 'Cost now', 'Index'], sets: [[50, 60], [40, 42], [200, 230], [60, 66], [80, 100], [25, 30], [120, 132], [20, 25]], inp: ([base, now]) => ({ now, base }), val: ([b, n]) => n / b * 100, bad: ([b, n]) => b / n * 100, show: fmt.idx, cells: ([b, n]) => [fmt.usd2(b), fmt.usd2(n)], y: 'Price index = cost now ÷ base-year cost × 100.', tol: 0.06 },
+    { id: 'infl', d: 'prices', f: 'infl', cols: ['Old CPI', 'New CPI', 'Inflation'], sets: [[120, 126], [200, 210], [150, 156], [125, 130], [110, 121], [160, 168], [250, 260], [180, 189]], inp: ([old, neu]) => ({ old, neu }), val: ([o, n]) => (n - o) / o * 100, bad: ([o, n]) => n - o, show: fmt.pct, cells: ([o, n]) => [String(o), String(n)], y: 'Inflation rate = (new ' + MINUS + ' old) ÷ old × 100.', tol: 0.06 },
+    { id: 'real', d: 'real', f: 'realgdp', cols: ['Nominal GDP', 'Deflator', 'Real GDP'], sets: [[1050, 105], [1320, 110], [1000, 125], [600, 120], [660, 110], [1800, 120], [2200, 110], [500, 125]], inp: ([nom, def]) => ({ nom, def }), val: ([n, d]) => n / d * 100, bad: ([n, d]) => n * d / 100, show: fmt.num, cells: ([n, d]) => [fmt.num(n), String(d)], y: 'Real GDP = nominal GDP ÷ deflator × 100.', tol: 0.51 },
+    { id: 'def', d: 'real', f: 'deflator', cols: ['Nominal GDP', 'Real GDP', 'Deflator'], sets: [[1050, 1000], [1320, 1200], [1000, 800], [600, 500], [660, 600], [1800, 1500], [2200, 2000], [500, 400]], inp: ([nom, real]) => ({ nom, real }), val: ([n, re]) => n / re * 100, bad: ([n, re]) => re / n * 100, show: fmt.idx, cells: ([n, re]) => [fmt.num(n), fmt.num(re)], y: 'Deflator = nominal GDP ÷ real GDP × 100.', tol: 0.06 },
+    { id: 'wage', d: 'prices', f: 'realwage', cols: ['Wage', 'CPI', 'Real wage'], sets: [[18, 120], [22, 110], [25, 125], [30, 150], [27, 135], [24, 120], [33, 110], [36, 120]], inp: ([wage, cpi]) => ({ wage, cpi }), val: ([w, c]) => w / c * 100, bad: ([w, c]) => w * c / 100, show: fmt.usd2, cells: ([w, c]) => [fmt.usd2(w), String(c)], y: 'Real wage = nominal wage ÷ CPI × 100.', tol: 0.006 },
+    { id: 'cyc', d: 'cycle', f: 'cyclical', cols: ['Actual', 'Natural', 'Cyclical'], sets: [[6.5, 4.5], [7, 5], [6, 4.5], [3.5, 4.5], [5.5, 4], [8, 5], [4, 5], [7.5, 5]], inp: ([actual, natural]) => ({ actual, natural }), val: ([a, n]) => a - n, bad: ([a, n]) => a + n, show: fmt.pct, cells: ([a, n]) => [fmt.pct(a), fmt.pct(n)], y: 'Cyclical = actual ' + MINUS + ' natural.', tol: 0.06 },
+  ];
+  BADS.forEach((sp) => {
+    const recs = [0, 1, 2, 3, 4, 5].map((n) => ({ n, k: String(n + 1), lvl: 3 }));
+    kind('bad-' + sp.id, sp.d, 'badcell', recs, (x) => {
+      const rows = [0, 1, 2, 3].map((j) => sp.sets[(x.n * 2 + j) % sp.sets.length]);
+      const answer = x.n % 4;
+      const shown = rows.map((row, i) => (i === answer ? sp.bad(row) : sp.val(row)));
+      const cells = rows.map((row, i) => [`Row ${i + 1}`].concat(sp.cells(row), [sp.show(shown[i])]));
+      return fin({
+        desk: sp.d, verb: 'badcell', lvl: 3, order: 'FIND THE BAD NUMBER', ask: 'A rookie filled in the last column. Tap the row with the wrong number.', columns: [''].concat(sp.cols), cells,
+        options: cells.map((row) => ({ label: row[0] })), answer, fix: sp.show(sp.val(rows[answer])), check: { f: sp.f, inputs: rows.map(sp.inp), shown, tol: sp.tol }, why: sp.y,
+      });
+    });
+  });
+
+  /* ================= sort the pile ================= */
+  const PILES = [
+    { id: 'counted', d: 'gdp', lvl: 1, n: 14, ask: "Is each one in this year's U.S. GDP?", bins: ['Counted', 'Not counted'], pool: () => GDP.filter((g) => g.lvl <= 2).map((g) => ({ t: g.t, bin: g.line ? 0 : 1, y: g.y })) },
+    { id: 'loop', d: 'gdp', lvl: 1, n: 10, ask: 'Does this money leave the circular flow or come in?', bins: ['Into the loop', 'Out of the loop'], pool: () => LOOP.map((l) => ({ t: l.t, bin: l.dir === 'in' ? 0 : 1, y: l.y })) },
+    { id: 'labor', d: 'jobs', lvl: 1, n: 14, ask: 'Is each person in the labor force?', bins: ['In the labor force', 'Not in it'], pool: () => PEOPLE.map((p) => ({ t: p.t, bin: p.st === 'N' ? 1 : 0, y: p.y })) },
+    { id: 'realnom', d: 'real', lvl: 1, n: 10, ask: 'Real or nominal?', bins: ['Real', 'Nominal'], pool: () => REALNOM.map((x) => ({ t: x.t, bin: x.key === 'Real' ? 0 : 1, y: x.y })) },
+    { id: 'gainlose', d: 'costs', lvl: 1, n: 14, ask: 'Inflation turns out higher than everyone expected.', bins: ['Gains', 'Loses'], pool: () => EFFECTS.filter((e) => e.key !== 'protected').map((e) => ({ t: e.t, bin: e.key === 'gains' ? 0 : 1, y: e.y })) },
+    { id: 'costs', d: 'costs', lvl: 2, n: 8, ask: 'Which cost of inflation is it?', bins: ['Menu costs', 'Shoe-leather costs'], pool: () => COSTS.map((c) => ({ t: c.t, bin: c.key === 'menu' ? 0 : 1, y: c.y })) },
+    { id: 'phase', d: 'cycle', lvl: 1, n: 8, ask: 'Expansion or contraction?', bins: ['Expansion', 'Contraction'], pool: () => PHASES.filter((p) => p.key === 'expansion' || p.key === 'contraction').map((p) => ({ t: p.t, bin: p.key === 'expansion' ? 0 : 1, y: p.y })) },
+    { id: 'types', d: 'jobs', lvl: 2, n: 8, ask: 'Frictional or cyclical?', bins: ['Frictional', 'Cyclical'], pool: () => TYPES.filter((x) => x.key !== 'S').map((x) => ({ t: x.t, bin: x.key === 'F' ? 0 : 1, y: x.y })) },
+    { id: 'elastic', d: 'micro', lvl: 1, n: 6, ask: 'Is demand elastic or inelastic?', bins: ['Elastic', 'Inelastic'], pool: () => MICRO_ELASTIC.map((x) => ({ t: x.t, bin: x.key === 'Elastic' ? 0 : 1, y: x.y })) },
+    { id: 'nameit', d: 'prices', lvl: 1, n: 8, ask: 'Prices still rising, or falling?', bins: ['Still rising', 'Falling'], pool: () => NAMEIT.filter((x) => x.key === 'dis' || x.key === 'de').map((x) => ({ t: x.t, bin: x.key === 'dis' ? 0 : 1, y: x.y })) },
+  ];
+  PILES.forEach((sp) => {
+    const recs = Array.from({ length: sp.n }, (_, i) => ({ k: String(i + 1), lvl: sp.lvl }));
+    kind('pile-' + sp.id, sp.d, 'pile', recs, (x, r) => {
+      const pool = shuffle(r, sp.pool());
+      const a = pool.filter((c) => c.bin === 0), b = pool.filter((c) => c.bin === 1);
+      const nA = 1 + Math.floor(r() * 3);
+      const cards = shuffle(r, a.slice(0, nA).concat(b.slice(0, 4 - nA)));
+      return fin({ desk: sp.d, verb: 'pile', lvl: sp.lvl, order: 'SORT THE PILE', ask: sp.ask, cards, options: sp.bins.map((label, i) => ({ label, stampClass: 'neutral', key: i })), why: 'Every card went in the right pile.' }, cards.map((c) => c.t));
+    });
+  });
+
+  /* ================= odd one out ================= */
+  const short = (s) => s.length <= 46;
+  const ODD = [
+    ...[['C', 'I'], ['I', 'C'], ['G', 'C'], ['C', 'G'], ['I', 'G'], ['G', 'I'], ['Xn', 'C'], ['C', 'Xn'], ['Xn', 'I'], ['I', 'Xn'], ['G', 'Xn'], ['Xn', 'G']].map(([a, b]) => ({ d: 'gdp', lvl: 2, label: (g) => g.s, group: (k) => GDP.filter((g) => g.line === k && g.lvl <= 2), tag: (k) => B.BIN[k].label, a, b })),
+    ...[['transfer', 'G'], ['G', 'transfer'], ['used', 'C'], ['C', 'used'], ['financial', 'I'], ['I', 'financial'], ['intermediate', 'C'], ['abroad', 'C'], ['C', 'abroad'], ['used', 'financial'], ['transfer', 'used']].map(([a, b]) => ({ d: 'gdp', lvl: 2, label: (g) => g.s, group: (k) => GDP.filter((g) => (g.line === k || g.no === k) && g.lvl <= 2 && !((a === 'G' || b === 'G') && /gift/i.test(g.s))), tag: (k) => B.BIN[k].label, a, b })),
+    ...[['E', 'U'], ['U', 'E'], ['N', 'E'], ['E', 'N'], ['U', 'N'], ['N', 'U'], ['E', 'U'], ['U', 'N'], ['N', 'E']].map(([a, b], i) => ({ d: 'jobs', lvl: 1, label: (p) => p.s, group: (k) => PEOPLE.filter((p) => p.st === k), tag: (k) => B.BIN[k].label, a, b, tagKey: i })),
+    ...[['gains', 'loses'], ['loses', 'gains'], ['protected', 'loses'], ['loses', 'protected'], ['gains', 'protected'], ['protected', 'gains']].map(([a, b]) => ({ d: 'costs', lvl: 1, ask: 'Surprise inflation hits. Three go together. Tap the one that does not.', why: `That one ${{ gains: 'gains', loses: 'loses', protected: 'is protected' }[b]}. The other three ${{ gains: 'gain', loses: 'lose', protected: 'are protected' }[a]}.`, label: (e) => e.s, group: (k) => EFFECTS.filter((e) => e.key === k), tag: (k) => B.BIN[k].label, a, b })),
+    ...[['out', 'in'], ['in', 'out'], ['out', 'in'], ['in', 'out'], ['out', 'in'], ['in', 'out']].map(([a, b]) => ({ d: 'gdp', lvl: 1, label: (l) => l.s, group: (k) => LOOP.filter((l) => l.dir === k), tag: (k) => (k === 'out' ? 'Leaves the loop' : 'Comes into the loop'), a, b })),
+    ...[['Real', 'Nominal'], ['Nominal', 'Real'], ['Real', 'Nominal'], ['Nominal', 'Real']].map(([a, b]) => ({ d: 'real', lvl: 1, ask: 'All four describe GDP. Three go together. Tap the one that does not.', label: (x) => x.t, group: (k) => REALNOM.filter((x) => x.key === k && short(x.t) && !/\b(pay|rate|raise)\b/i.test(x.t)), tag: (k) => k, a, b })),
+    ...[['dis', 'de'], ['de', 'dis'], ['rising', 'de'], ['dis', 'rising'], ['rising', 'dis'], ['de', 'rising']].map(([a, b]) => ({ d: 'prices', lvl: 2, label: (x) => x.t, group: (k) => NAMEIT.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, a, b })),
+    ...[['expansion', 'contraction'], ['contraction', 'expansion'], ['expansion', 'contraction'], ['contraction', 'expansion']].map(([a, b]) => ({ d: 'cycle', lvl: 1, label: (x) => x.t, group: (k) => PHASES.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, a, b })),
+    ...[['menu', 'shoe'], ['shoe', 'menu']].map(([a, b]) => ({ d: 'costs', lvl: 2, label: (x) => x.t, group: (k) => COSTS.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, a, b })),
+    ...[['Elastic', 'Inelastic'], ['Inelastic', 'Elastic']].map(([a, b]) => ({ d: 'micro', lvl: 1, ask: 'Think about how buyers respond to a price change. Three go together. Tap the one that does not.', label: (x) => x.t, group: (k) => MICRO_ELASTIC.filter((x) => x.key === k && !/%/.test(x.t)), tag: (k) => k, a, b })),
+  ];
+  const oddRecs = ODD.filter((o) => o.group(o.a).length >= 3 && o.group(o.b).length >= 1).map((o, i) => Object.assign({ k: `o${i}` }, o));
+  eachDesk(oddRecs, 'odd', 'oddone', (x, r) => {
+    const three = shuffle(r, x.group(x.a)).slice(0, 3);
+    const odd = pickOne(r, x.group(x.b));
+    const all = shuffle(r, three.concat([odd]));
+    const options = all.map((rec) => ({ label: x.label(rec), tag: rec === odd ? x.tag(x.b) : x.tag(x.a) }));
+    return fin({ desk: x.d, verb: 'oddone', lvl: x.lvl, order: 'ODD ONE OUT', ask: x.ask || 'Three go together. Tap the one that does not.', options, answer: all.indexOf(odd), why: x.why || `That one is ${x.tag(x.b)}. The other three are ${x.tag(x.a)}.` }, options.map((o) => o.label));
+  });
+
+  /* ================= tap the wave: anywhere on the curve, no markers ================= */
+  function zonesFor(prop, phi) {
+    const h = 0.0005;
+    const slope = (x) => (wave.actual(x + h, phi) - wave.actual(x - h, phi)) / (2 * h);
+    const gap = (x) => wave.actual(x, phi) - wave.potential(x);
+    if (prop === 'peak' || prop === 'trough') {
+      const out = [];
+      for (let x = 0.02; x < 0.98; x += 0.0015) {
+        const a = slope(x), b = slope(x + 0.0015);
+        if (prop === 'peak' && a > 0 && b <= 0) out.push([Math.max(0, x - 0.045), Math.min(1, x + 0.045)]);
+        if (prop === 'trough' && a < 0 && b >= 0) out.push([Math.max(0, x - 0.045), Math.min(1, x + 0.045)]);
+      }
+      return out;
+    }
+    const test = { contraction: (x) => slope(x) < 0, expansion: (x) => slope(x) > 0, above: (x) => gap(x) > 0.012, below: (x) => gap(x) < -0.012 }[prop];
+    const out = [];
+    let start = null;
+    for (let x = 0; x <= 1.0001; x += 0.002) {
+      if (x <= 1 && test(x)) { if (start === null) start = x; } else if (start !== null) { if (x - start > 0.05) out.push([start, Math.min(1, x)]); start = null; }
+    }
+    return out;
+  }
+  const WAVES = [
+    { prop: 'peak', order: 'TAP THE WAVE AT A PEAK', ask: 'Tap the top of the wave.', lvl: 1, y: 'The peak is the top of the wave. Real GDP falls next.' },
+    { prop: 'trough', order: 'TAP THE WAVE AT A TROUGH', ask: 'Tap the bottom of the wave.', lvl: 1, y: 'The trough is the bottom of the wave. Real GDP rises next.' },
+    { prop: 'contraction', order: 'TAP WHERE THE WAVE FALLS', ask: 'Contraction: tap anywhere real GDP is falling.', lvl: 1, y: 'Falling real GDP is a contraction.' },
+    { prop: 'expansion', order: 'TAP WHERE THE WAVE RISES', ask: 'Expansion: tap anywhere real GDP is rising.', lvl: 1, y: 'Rising real GDP is an expansion.' },
+    { prop: 'above', order: 'TAP THE WAVE ABOVE POTENTIAL', ask: 'Positive gap: tap where actual is above potential.', lvl: 2, y: 'Above the line is a positive gap. Unemployment is below the natural rate.' },
+    { prop: 'below', order: 'TAP THE WAVE BELOW POTENTIAL', ask: 'Negative gap: tap where actual is below potential.', lvl: 2, y: 'Below the line is a negative gap. Unemployment is above the natural rate.' },
+  ];
+  const waveRecs = [];
+  WAVES.forEach((w) => PHIS.forEach((phi, j) => { if (zonesFor(w.prop, phi).length) waveRecs.push(Object.assign({ k: `${w.prop}${j}`, phi }, w)); }));
+  kind('wave', 'cycle', 'wave', waveRecs, (x) => finish({ desk: 'cycle', verb: 'wave', lvl: x.lvl, order: x.order, ask: x.ask, prop: x.prop, zones: zonesFor(x.prop, x.phi), chart: { kind: 'cycle', phi: x.phi, markers: [] }, why: x.y }));
+
+  /* ================= label it: one spot lights up at a time ================= */
+  const labelRecs = [];
+  PHIS.forEach((phi, j) => { for (let i = 0; i < 3; i++) labelRecs.push({ k: `c${j}${i}`, phi, d: 'cycle', lvl: 1 }); });
+  kind('label-cycle', 'cycle', 'label', labelRecs, (x, r) => {
+    const pts = wave.points(x.phi);
+    const of = (ph) => pts.filter((p) => p.phase === ph);
+    let chosen = null;
+    for (let tries = 0; tries < 60 && !chosen; tries++) {
+      const trial = ['peak', 'trough', 'expansion', 'contraction'].map((ph) => pickOne(r, of(ph))).sort((a, b) => a.x - b.x);
+      if (trial.every((p, i) => i === 0 || p.x - trial[i - 1].x >= 0.14)) chosen = trial;
+    }
+    if (!chosen) return null;
+    const options = bins('expansion', 'peak', 'contraction', 'trough');
+    const steps = shuffle(r, chosen.map((m, i) => ({ spot: i, answer: options.findIndex((o) => o.key === m.phase) })));
+    return finish({ desk: 'cycle', verb: 'label', lvl: 1, diagram: 'cycle', order: 'LABEL THE GRAPH', ask: 'Name each lit point.', chart: { kind: 'cycle', phi: x.phi, markers: chosen, pickOne: false, labeling: true }, options, steps, why: 'Rising is expansion, falling is contraction, and the turning points are peak and trough.' });
+  });
+  const FLOW_SPOTS = ['Goods and services', 'Consumption expenditures', 'Factors of production', 'Wages, rent, interest, profit', 'Product market', 'Factor market'];
+  kind('label-flow', 'gdp', 'label', Array.from({ length: 14 }, (_, i) => ({ k: `f${i}`, lvl: 2 })), (x, r) => {
+    const spots = shuffle(r, FLOW_SPOTS.map((_, i) => i)).slice(0, 4);
+    const options = FLOW_SPOTS.map((label) => ({ label }));
+    return finish({ desk: 'gdp', verb: 'label', lvl: 2, diagram: 'flow', order: 'LABEL THE LOOP', ask: 'Name each lit part of the circular flow.', options, steps: spots.map((s) => ({ spot: s, answer: s })), why: 'Inner loop: real things. Outer loop: money. Top: product market. Bottom: factor market.' });
+  });
+
+  if (inNode) module.exports = B;
+})(typeof globalThis !== 'undefined' ? globalThis : this);

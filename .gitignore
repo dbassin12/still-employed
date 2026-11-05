@@ -1,0 +1,6 @@
+screenshots/
+__pycache__/
+.venv/
+.DS_Store
+*.local.json
+docs/answer-key.md
