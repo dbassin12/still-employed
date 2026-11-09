@@ -6,7 +6,7 @@ and checks each screen for console errors, sideways scrolling, controls off the 
 em dashes, a missing do-this-now line, and more than one main button. It also checks the money math.
 
 Run python3 build.py first. Uses the Playwright in ../open-outcry/.venv and installed Chrome:
-  ~/projects/open-outcry/.venv/bin/python tools/playtest.py [all|solo|class|cover|story|inputs|corners|shots]
+  ~/projects/open-outcry/.venv/bin/python tools/playtest.py [all|solo|class|cover|story|inputs|corners|shots|sound]
 Prints ALL CHECKS PASSED and exits 0 when clean. SE_SHOTS=folder puts screenshots somewhere else.
 """
 import os, re, shutil, sys
@@ -560,7 +560,7 @@ async ({every}) => {
   for (let seed = 1; seed < 25; seed++) for (const tier of [0, 1, 3]) se.B.boss(tier, se.B.rng(seed)).forEach((t) => tasks.push(t));
   for (const t of tasks) {
     se.showMiss(t);
-    await new Promise(r => setTimeout(r, t.verb === 'stamp' ? 40 : 0));
+    await new Promise(r => setTimeout(r, t.verb === 'stamp' || t.verb === 'truefalse' ? 40 : 0)); // same screen, same stamp: let it land
     await new Promise(r => requestAnimationFrame(r));
     const n = document.querySelector('.v-next');
     const prob = [];
@@ -1032,6 +1032,332 @@ def tour_dark(b):
     ctx.close()
 
 
+def sound_state(page):
+    return page.evaluate('window.__se.sound.state()')
+
+
+def wait_for(page, test, label, ms=4000):
+    waited = 0
+    while waited < ms:
+        if test(sound_state(page)):
+            return True
+        page.wait_for_timeout(100)
+        waited += 100
+    problems.append(f'sound: {label} (state {sound_state(page)})')
+    return False
+
+
+def clear_of_mute(page, label):
+    """The corner button must not sit on top of anything a student reads or taps."""
+    hit = page.evaluate("""() => {
+      const m = document.querySelector('#mute');
+      if (!m || m.hidden) return null;
+      const a = m.getBoundingClientRect();
+      const out = [];
+      document.querySelectorAll('#hud b, #hud span, #stage h1, #stage h2, #stage p, #stage button, #stage td, #tray .doline, #tray button').forEach((el) => {
+        if (!el.offsetParent) return;
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const boxes = el.tagName === 'BUTTON' ? [el.getBoundingClientRect()] : Array.from(range.getClientRects());
+        for (const b of boxes) {
+          if (b.width && b.height && b.left < a.right && b.right > a.left && b.top < a.bottom && b.bottom > a.top) { out.push(el.tagName + ': ' + (el.textContent || '').trim().slice(0, 30)); break; }
+        }
+      });
+      return out;
+    }""")
+    if hit:
+        problems.append(f'sound: mute button covers {hit[:3]} on {label}')
+
+
+def sound_rules(b):
+    # 1. Nothing starts before a tap, and the home screen offers both switches.
+    ctx, page = new_page(b, 'phone', tag='sound')
+    requests = []
+    page.on('request', lambda r: requests.append(r.url))
+    if sound_state(page)['ctx'] is not None:
+        problems.append('sound: audio started before any tap')
+    tools = page.locator('.home-tools').inner_text()
+    if 'Music: on' not in tools or 'Sound: on' not in tools:
+        problems.append(f'sound: home switches read {tools!r}')
+    if page.locator('#mute').is_visible():
+        problems.append('sound: corner button shows on the home screen')
+
+    # 2. The first tap starts the piano.
+    page.locator('#go-solo').click()
+    page.wait_for_timeout(300)
+    if sound_state(page)['ctx'] != 'running':
+        problems.append(f'sound: audio is not running after the first tap: {sound_state(page)}')
+    wait_for(page, lambda s: s['playing'] and s['scene'] == 'calm' and s['bars'] >= 1, 'music did not start on the orientation screen')
+    if not page.locator('#mute').is_visible():
+        problems.append('sound: corner button missing in the game')
+    clear_of_mute(page, 'orientation')
+
+    # 3. A right answer stamps, a wrong one slides a pink slip, and rank moves the band.
+    click_main(page)
+    page.wait_for_timeout(150)
+    if sound_state(page)['scene'] != 'calm':
+        problems.append(f'sound: the practice task should stay on the calm piano: {sound_state(page)}')
+    page.evaluate('window.__se.sound.clearLog(); window.__se.unlock(); window.__se.answerRight()')
+    if page.evaluate('window.__se.sound.log()')[:1] != ['right']:
+        problems.append(f'sound: right answer played {page.evaluate("window.__se.sound.log()")}')
+    click_main(page)
+    page.wait_for_timeout(150)
+    state_now = sound_state(page)
+    if state_now['scene'] != 'work' or state_now['level'] != 0:
+        problems.append(f'sound: first real task should be the Intern band: {state_now}')
+    if 'paper' not in page.evaluate('window.__se.sound.log()'):
+        problems.append('sound: a new task did not play the paper sound')
+    page.evaluate('window.__se.sound.clearLog(); window.__se.unlock(); window.__se.answerWrong()')
+    if 'miss' not in page.evaluate('window.__se.sound.log()'):
+        problems.append(f'sound: wrong answer played {page.evaluate("window.__se.sound.log()")}')
+    page.wait_for_timeout(150)
+    clear_of_mute(page, 'after a miss')
+
+    # 4. Play to the first promotion and the first Release.
+    page.evaluate('window.__se.sound.clearLog()')
+    steps, promos, releases = 0, 0, 0
+    while steps < 120 and not (promos >= 2 and releases >= 1):
+        steps += 1
+        page.evaluate('window.__se.unlock()')
+        scr = page.evaluate('window.__se.S.screen')
+        clear_of_mute(page, scr)
+        if scr == 'task':
+            page.evaluate('window.__se.answerRight()')
+            page.wait_for_timeout(20)
+            st = sound_state(page)
+            boss = page.evaluate('!!(window.__se.S.solo && window.__se.S.solo.boss)')
+            if boss:
+                releases += 1
+                if st['scene'] != 'release':
+                    problems.append(f'sound: Release should have its own music: {st["scene"]}')
+            elif st['scene'] != 'work' or st['level'] != page.evaluate('window.__se.S.solo.rank'):
+                problems.append(f'sound: band {st["scene"]} {st["level"]} does not match rank')
+            page.evaluate('window.__se.next()')
+            page.wait_for_timeout(20)
+        elif scr == 'promo':
+            promos += 1
+            if 'promoted' not in page.evaluate('window.__se.sound.log()'):
+                problems.append('sound: promotion played no sound')
+            page.locator('.perk').first.click()
+            page.wait_for_timeout(20)
+        else:
+            click_main(page)
+            page.wait_for_timeout(20)
+    if promos < 2 or releases < 1:
+        problems.append(f'sound: walk reached {promos} promotions and {releases} Release steps')
+    if page.evaluate('window.__se.sound.log().includes("release")') is False and releases >= 3:
+        problems.append('sound: a clean Release played no sound')
+
+    # 5. The corner button and the M key silence everything, at once, and it sticks.
+    page.locator('#mute').click()
+    page.wait_for_timeout(350)
+    st = sound_state(page)
+    if st['playing'] or st['ctx'] == 'running':
+        problems.append(f'sound: mute left audio going: {st}')
+    if page.locator('#mute').get_attribute('aria-pressed') != 'true':
+        problems.append('sound: mute button does not show it is pressed')
+    page.evaluate('window.__se.sound.clearLog(); window.__se.sound.play("right")')
+    if page.evaluate('window.__se.sound.heard()'):
+        problems.append('sound: an effect played while muted')
+    page.keyboard.press('m')
+    page.wait_for_timeout(350)
+    wait_for(page, lambda s: s['playing'] and s['ctx'] == 'running', 'M key did not bring the music back')
+    page.keyboard.press('m')
+    page.wait_for_timeout(250)
+    page.reload()
+    page.wait_for_timeout(450)
+    tools = page.locator('.home-tools').inner_text()
+    if 'Music: off' not in tools or 'Sound: off' not in tools:
+        problems.append(f'sound: mute was not remembered: {tools!r}')
+
+    # 6. The home switches work one at a time.
+    page.locator('[data-act="toggle-sfx"]').click()
+    page.wait_for_timeout(250)
+    st = sound_state(page)
+    tools = page.locator('.home-tools').inner_text()
+    if 'Sound: on' not in tools or 'Music: off' not in tools or st['playing']:
+        problems.append(f'sound: effects-only switch reads {tools!r}, {st}')
+    page.locator('[data-act="toggle-music"]').click()
+    wait_for(page, lambda s: s['playing'], 'music switch did not start the music')
+    page.locator('[data-act="toggle-sfx"]').click()
+    page.wait_for_timeout(120)
+    page.evaluate('window.__se.sound.clearLog(); window.__se.sound.play("tap")')
+    if page.evaluate('window.__se.sound.heard()'):
+        problems.append('sound: effect played with Sound off and Music on')
+    if not sound_state(page)['playing']:
+        problems.append('sound: turning Sound off stopped the music')
+    page.locator('[data-act="toggle-sfx"]').click()
+
+    # 7. A hidden tab goes quiet and comes back.
+    page.evaluate("""() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); }""")
+    page.wait_for_timeout(250)
+    if sound_state(page)['ctx'] != 'suspended':
+        problems.append(f'sound: hidden tab kept playing: {sound_state(page)}')
+    page.evaluate("""() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); }""")
+    wait_for(page, lambda s: s['ctx'] == 'running', 'audio did not come back when the tab returned')
+
+    # 8. Nothing was downloaded for any of this.
+    outside = [u for u in requests if not u.startswith('file:') and not u.startswith('data:') and 'fonts.g' not in u]
+    if outside:
+        problems.append(f'sound: outside requests {outside[:3]}')
+    if page.locator('audio, video').count():
+        problems.append('sound: page has an audio or video tag')
+    ctx.close()
+
+    # 9. Firing: the door, then silence, then the piano at payday.
+    ctx, page = new_page(b, 'laptop', tag='sound-fired')
+    page.locator('#go-solo').click()
+    page.wait_for_timeout(300)
+    click_main(page)
+    page.wait_for_timeout(100)
+    page.evaluate('window.__se.unlock(); window.__se.answerRight()')
+    click_main(page)
+    page.wait_for_timeout(100)
+    for _ in range(3):
+        page.evaluate('window.__se.unlock(); window.__se.answerWrong()')
+        page.wait_for_timeout(30)
+        page.evaluate('window.__se.unlock(); window.__se.next()')
+        page.wait_for_timeout(30)
+    wait_for(page, lambda s: s['scene'] == 'none' and not s['playing'], 'music kept playing after being fired')
+    if 'fired' not in page.evaluate('window.__se.sound.log()'):
+        problems.append('sound: firing played no door')
+    clear_of_mute(page, 'fired')
+    page.evaluate('window.__se.unlock()')
+    page.locator('[data-act="status"]').first.click()
+    page.wait_for_timeout(120)
+    wait_for(page, lambda s: s['scene'] == 'calm' and s['playing'], 'piano did not come back after the firing', ms=6000)
+    clear_of_mute(page, 'status')
+    ctx.close()
+
+    # 10. The class game: both switches in Tools, a steal knocks and pulls the music down, no corner button.
+    ctx, page = new_page(b, 'projector', tag='sound-class')
+    page.locator('#go-class').click()
+    page.wait_for_timeout(200)
+    if page.locator('#mute').is_visible():
+        problems.append('sound: corner button shows in class setup')
+    if page.locator('[data-act="toggle-music"]').count() != 1 or page.locator('[data-act="toggle-sfx"]').count() != 1:
+        problems.append('sound: class setup is missing a switch')
+    click_main(page)
+    page.wait_for_timeout(150)
+    click_main(page)
+    page.wait_for_timeout(150)
+    guard = 0
+    while page.evaluate('window.__se.S.screen') != 'task' and guard < 8:
+        guard += 1
+        page.evaluate('window.__se.unlock()')
+        click_main(page)
+        page.wait_for_timeout(120)
+    if sound_state(page)['scene'] != 'work':
+        problems.append(f'sound: class task should have the band: {sound_state(page)}')
+    page.evaluate('window.__se.sound.clearLog(); window.__se.unlock(); window.__se.answerWrong()')
+    page.wait_for_timeout(80)
+    log = page.evaluate('window.__se.sound.log()')
+    if 'knock' not in log or 'miss' not in log:
+        problems.append(f'sound: class miss played {log}')
+    if not sound_state(page).get('dipped'):
+        problems.append('sound: music did not dip for the steal')
+    page.locator('[data-act="tools"]').click()
+    page.wait_for_timeout(120)
+    labels = page.locator('#modal').inner_text()
+    if 'Music: on' not in labels or 'Sound: on' not in labels:
+        problems.append(f'sound: Tools switches read {labels[:200]!r}')
+    page.locator('[data-act="close-modal"]').click()
+    page.evaluate('window.__se.closeSteal && window.__se.closeSteal(null)')
+    page.wait_for_timeout(80)
+    if sound_state(page).get('dipped'):
+        problems.append('sound: music stayed down after the steal')
+    if page.locator('#mute').is_visible():
+        problems.append('sound: corner button shows during the class game')
+    ctx.close()
+
+    # 11. A browser with no audio at all still plays the whole game.
+    ctx = b.new_context(viewport={'width': 390, 'height': 844})
+    page = ctx.new_page()
+    page.add_init_script('delete window.AudioContext; delete window.webkitAudioContext;')
+    page.on('pageerror', lambda e: errors.append(f'[no-audio] pageerror: {e}'))
+    page.on('console', lambda m: errors.append(f'[no-audio] console.{m.type}: {m.text}') if m.type == 'error' and 'fonts.g' not in m.text else None)
+    page.goto(PAGE)
+    page.wait_for_timeout(450)
+    page.locator('#go-solo').click()
+    page.wait_for_timeout(450)
+    click_main(page)
+    page.wait_for_timeout(100)
+    page.evaluate('window.__se.unlock(); window.__se.answerRight()')
+    click_main(page)
+    page.wait_for_timeout(100)
+    page.evaluate('window.__se.unlock(); window.__se.answerWrong()')
+    if sound_state(page)['ctx'] is not None:
+        problems.append('sound: claims audio in a browser with none')
+    ctx.close()
+
+    # 11b. Audio that fails in the middle of a game must not stop the game.
+    for label, script in [
+        ('constructor throws', 'window.AudioContext = function () { throw new Error("no audio here"); }; delete window.webkitAudioContext;'),
+        ('sources throw after a few', 'const real = AudioContext.prototype.createBufferSource; let n = 0; AudioContext.prototype.createBufferSource = function () { if (++n > 3) throw new Error("audio died"); return real.call(this); };'),
+        ('gains throw after a few', 'const real = AudioContext.prototype.createGain; let n = 0; AudioContext.prototype.createGain = function () { if (++n > 40) throw new Error("audio died"); return real.call(this); };'),
+        ('resume throws', 'AudioContext.prototype.resume = function () { throw new Error("no resume"); };'),
+    ]:
+        ctx = b.new_context(viewport={'width': 390, 'height': 844})
+        page = ctx.new_page()
+        page.add_init_script(script)
+        page.on('pageerror', lambda e, l=label: errors.append(f'[broken audio: {l}] pageerror: {e}'))
+        page.goto(PAGE)
+        page.wait_for_timeout(450)
+        page.locator('#go-solo').click()
+        page.wait_for_timeout(350)
+        click_main(page)
+        page.wait_for_timeout(150)
+        page.evaluate('window.__se.unlock(); window.__se.answerRight()')
+        click_main(page)
+        page.wait_for_timeout(150)
+        for k in range(3):
+            page.evaluate('window.__se.unlock(); window.__se.answerRight()')
+            page.wait_for_timeout(40)
+            page.evaluate('window.__se.unlock(); window.__se.next()')
+            page.wait_for_timeout(40)
+        page.evaluate('window.__se.unlock(); window.__se.answerWrong()')
+        page.wait_for_timeout(40)
+        pay = page.evaluate('window.__se.S.solo.pay')
+        if pay <= 0 or page.evaluate('window.__se.S.solo.slips') != 1:
+            problems.append(f'sound: game stalled with broken audio ({label}): pay {pay}')
+        ctx.close()
+
+    # 12. The first tap should not stutter: how long the effects take to prepare, on a slow phone.
+    ctx = b.new_context(viewport={'width': 390, 'height': 844})
+    page = ctx.new_page()
+    client = ctx.new_cdp_session(page)
+    client.send('Emulation.setCPUThrottlingRate', {'rate': 4})
+    page.goto(PAGE)
+    page.wait_for_timeout(600)
+    cost = page.evaluate("""() => {
+      const A = window.SE_AUDIO, t0 = performance.now();
+      A.Dsp.SFX_NAMES.concat(A.Dsp.DRUM_NAMES).forEach((n) => { for (let v = 0; v < A.Dsp.variants(n); v++) A.Dsp.fx(n, v); });
+      const fx = performance.now() - t0;
+      let worst = 0;
+      A.Dsp.KEY_NOTES.forEach((m) => { const t = performance.now(); A.Dsp.piano(m); worst = Math.max(worst, performance.now() - t); });
+      return { fx: Math.round(fx), worstNote: Math.round(worst), keys: Math.round(performance.now() - t0 - fx) };
+    }""")
+    report.append(f'sound: first tap on a 4x slower device: effects {cost["fx"]} ms, piano {cost["keys"]} ms in steps, worst step {cost["worstNote"]} ms')
+    if cost['fx'] > 250 or cost['worstNote'] > 180:
+        problems.append(f'sound: preparing audio is slow on a phone: {cost}')
+    ctx.close()
+
+    # 13. A real render through the whole chain is clean and neither silent nor clipped.
+    ctx, page = new_page(b, 'laptop', tag='sound-render')
+    result = page.evaluate("""async () => {
+      const buf = await window.SE_AUDIO.renderClip({ seconds: 14, seed: 3, events: [{ t: 0, scene: 'work', level: 3 }, { t: 2, sfx: 'right' }, { t: 5, sfx: 'miss' }, { t: 8, sfx: 'promoted', o: { level: 4, tore: true } }, { t: 8.01, scene: 'work', level: 4 }] });
+      const l = buf.getChannelData(0), r = buf.getChannelData(1);
+      let bad = 0, peak = 0, sum = 0;
+      for (let i = 0; i < l.length; i++) { if (!Number.isFinite(l[i]) || !Number.isFinite(r[i])) bad++; peak = Math.max(peak, Math.abs(l[i]), Math.abs(r[i])); sum += l[i] * l[i]; }
+      return { bad, peak, rms: Math.sqrt(sum / l.length) };
+    }""")
+    if result['bad'] or result['peak'] >= 0.8 or result['rms'] < 0.005:
+        problems.append(f'sound: render {result}')
+    report.append(f'sound: render peak {result["peak"]:.2f}, rms {result["rms"]:.3f}')
+    ctx.close()
+    report.append('sound: rules checked at phone, laptop, projector, and with no audio')
+
+
 def main():
     with sync_playwright() as p:
         b = p.chromium.launch(channel='chrome')
@@ -1060,6 +1386,8 @@ def main():
             corners(b)
         if MODE in ('all', 'shots'):
             tour_dark(b)
+        if MODE in ('all', 'sound'):
+            sound_rules(b)
         b.close()
     print('\n'.join(report))
     uniq = list(dict.fromkeys(errors + problems))

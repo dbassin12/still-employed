@@ -11,6 +11,7 @@ shell = (src / "shell.html").read_text()
 page = (shell
         .replace("/*STYLE*/", (src / "style.css").read_text())
         .replace("/*BANK*/", (src / "records.js").read_text() + "\n" + (src / "bank.js").read_text() + "\n" + (src / "bank2.js").read_text())
+        .replace("/*AUDIO*/", (src / "audio.js").read_text())
         .replace("/*APP*/", (src / "app.js").read_text()))
 
 dist = root / "dist"

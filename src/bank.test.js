@@ -1,5 +1,5 @@
 'use strict';
-// Run: node --test src/
+// Run: node --test src/bank.test.js src/audio.test.js
 // These tests recompute every answer with formulas written here, apart from bank.js,
 // so a typo in the bank's math or a mismatched option fails instead of reaching a student.
 const test = require('node:test');

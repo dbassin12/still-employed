@@ -18,7 +18,7 @@
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage unavailable */ } },
   };
-  const DEFAULTS = { sound: false, classSound: true, extra: false, practiced: false, best: null, lastCard: null, name: '', seen: [], cupTowns: null, cupRounds: 3 };
+  const DEFAULTS = { music: true, sfx: true, mute: false, extra: false, practiced: false, best: null, lastCard: null, name: '', seen: [], cupTowns: null, cupRounds: 3 };
   let prefs = Object.assign({}, DEFAULTS);
   try { prefs = Object.assign(prefs, JSON.parse(store.get(KEY) || '{}')); } catch (e) { /* start clean */ }
   const savePrefs = () => store.set(KEY, JSON.stringify(prefs));
@@ -32,43 +32,78 @@
   const stage = () => $('#stage');
   const wall = (w) => { document.body.dataset.wall = w; };
 
-  /* ================= sound: synthesized, no files. Off in Solo by default (18 phones beeping is chaos). ================= */
+  /* ================= sound: see audio.js. This part only decides what plays and when. ================= */
   const Sound = (function () {
-    let ctx = null, master = null;
-    const on = () => (S.mode === 'class' ? !!prefs.classSound : !!prefs.sound);
-    function ac() {
-      if (!ctx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return null;
-        try { ctx = new AC(); master = ctx.createGain(); master.gain.value = 0.6; master.connect(ctx.destination); } catch (e) { ctx = null; return null; }
-      }
-      if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) { /* ignore */ } }
-      return ctx;
-    }
-    function tone(f, t0, dur, o) {
-      const c = ac(); if (!c) return;
-      o = o || {};
-      const now = c.currentTime + t0, osc = c.createOscillator(), g = c.createGain();
-      osc.type = o.type || 'sine';
-      osc.frequency.setValueAtTime(f, now);
-      if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, now + dur);
-      const v = o.vol == null ? 0.2 : o.vol;
-      g.gain.setValueAtTime(0.0001, now);
-      g.gain.exponentialRampToValueAtTime(v, now + 0.006);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-      osc.connect(g); g.connect(master);
-      osc.start(now); osc.stop(now + dur + 0.05);
-    }
+    /* Sound is a garnish. If a browser's audio misbehaves, the game must carry on without it, so nothing below can throw. */
+    const SILENT = { unlock() {}, configure() {}, scene() {}, play() {}, dipFor() {}, undip() {}, state: () => ({ ctx: null, playing: false }) };
+    let engine = SILENT;
+    try { engine = window.SE_AUDIO.createLive(); } catch (e) { engine = SILENT; }
+    const live = {};
+    Object.keys(SILENT).forEach((k) => { live[k] = (...args) => { try { return engine[k](...args); } catch (e) { engine = SILENT; return SILENT[k](...args); } }; });
+    const made = [];
+    const musicOn = () => prefs.music && !prefs.mute;
+    const fxOn = () => prefs.sfx && !prefs.mute;
+    const sync = () => live.configure(musicOn(), fxOn());
+    sync();
+    let lastDial = 0;
     return {
-      unlock() { if (on()) ac(); },
-      thunk() { if (!on()) return; tone(120, 0, 0.14, { type: 'triangle', vol: 0.32, to: 60 }); tone(900, 0, 0.03, { type: 'square', vol: 0.05 }); },
-      ding() { if (!on()) return; tone(988, 0, 0.1, { type: 'triangle', vol: 0.16 }); tone(1319, 0.08, 0.26, { type: 'triangle', vol: 0.16 }); },
-      slap() { if (!on()) return; tone(180, 0, 0.3, { type: 'sawtooth', vol: 0.14, to: 90 }); tone(70, 0, 0.2, { type: 'triangle', vol: 0.3 }); },
-      tick() { if (on()) tone(1200, 0, 0.05, { type: 'square', vol: 0.04 }); },
-      fanfare() { if (!on()) return; [523, 659, 784, 1046].forEach((f, i) => tone(f, i * 0.12, i === 3 ? 0.7 : 0.2, { type: 'triangle', vol: 0.16 })); },
-      fired() { if (!on()) return; [392, 330, 262, 196].forEach((f, i) => tone(f, i * 0.2, 0.3, { type: 'sawtooth', vol: 0.09 })); },
+      sync,
+      musicOn,
+      fxOn,
+      unlock() { live.unlock(); },
+      /* Every effect goes through here, by name, so the playtest can see what the game asked for. */
+      play(name, o) { made.push({ name, heard: fxOn() }); if (made.length > 300) made.shift(); live.play(name, o); },
+      dial() { const t = performance.now(); if (t - lastDial > 70) { lastDial = t; this.play('tap', { soft: true }); } },
+      scene(name, level) { live.scene(name, level || 0); },
+      dipFor(to) { live.dipFor(to); },
+      undip() { live.undip(); },
+      state() { return Object.assign(live.state(), { heardLast: made.length ? made[made.length - 1] : null }); },
+      log: () => made.map((m) => m.name),
+      heard: () => made.filter((m) => m.heard).map((m) => m.name),
+      clearLog() { made.length = 0; },
     };
   })();
+  /* The music follows the game. Rank sets how full the band is and which key it is in. */
+  function soundScene() {
+    const screen = S.screen, mode = S.mode;
+    if (screen === 'fired') return Sound.scene('none', 0);
+    if (mode === 'class') return Sound.scene(screen === 'task' || screen === 'turnend' ? 'work' : 'calm', 2);
+    if (mode === 'train') return Sound.scene(screen === 'task' ? 'work' : 'calm', 1);
+    if (mode === 'solo' && S.solo) {
+      const so = S.solo;
+      if (screen === 'review') return Sound.scene('work', 1);
+      if (so.boss || screen === 'bossintro') return Sound.scene('release', so.rank);
+      if (screen === 'task' || screen === 'promo' || screen === 'bossdone') return Sound.scene('work', so.overtime ? 5 : so.rank);
+    }
+    return Sound.scene('calm', 0);
+  }
+  /* The corner button is for phones: one tap, no menu, any time. The Tools menu covers it in class. */
+  function paintAudio() {
+    const m = $('#mute');
+    if (m) {
+      m.hidden = S.mode === 'class' || ['home', 'cupsetup', 'cuprules'].includes(S.screen);
+      m.setAttribute('aria-pressed', String(!!prefs.mute));
+      m.setAttribute('aria-label', prefs.mute ? 'Turn music and sound back on' : 'Mute music and sound');
+    }
+    $$('[data-act="toggle-music"]').forEach((b) => { b.textContent = `Music: ${Sound.musicOn() ? 'on' : 'off'}`; b.setAttribute('aria-pressed', String(Sound.musicOn())); });
+    $$('[data-act="toggle-sfx"]').forEach((b) => { b.textContent = `Sound: ${Sound.fxOn() ? 'on' : 'off'}`; b.setAttribute('aria-pressed', String(Sound.fxOn())); });
+  }
+  function toggleAudio(which) {
+    if (prefs.mute) { prefs.mute = false; prefs.music = which === 'music'; prefs.sfx = which === 'sfx'; }
+    else prefs[which] = !prefs[which];
+    savePrefs();
+    Sound.sync();
+    Sound.unlock();
+    if (which === 'sfx' && Sound.fxOn()) Sound.play('tap');
+    paintAudio();
+  }
+  function toggleMute() {
+    prefs.mute = !prefs.mute;
+    savePrefs();
+    Sound.sync();
+    Sound.unlock();
+    paintAudio();
+  }
 
   /* ================= clock: the fuse across the top ================= */
   const Clock = {
@@ -85,7 +120,7 @@
       const dt = (now - this.last) / 1000; this.last = now;
       if (!document.hidden) this.left -= Math.min(dt, 0.25);
       this.paint();
-      if (this.left <= 3 && Math.ceil(this.left) < this.lastTick) { this.lastTick = Math.ceil(this.left); Sound.tick(); }
+      if (this.left <= 3 && Math.ceil(this.left) < this.lastTick) { this.lastTick = Math.ceil(this.left); Sound.play('clock'); }
       if (this.left <= 0) { this.on = false; const cb = this.cb; this.cb = null; if (cb) cb(); return; }
       this.raf = requestAnimationFrame(this.frame.bind(this));
     },
@@ -481,6 +516,10 @@
     if (t.verb === 'label') lightSpot(t);
     if (o.clock) Clock.start(o.clock, () => answer(null)); else Clock.hide();
     lock(200);
+    Sound.undip();
+    soundScene();
+    paintAudio();
+    Sound.play('paper');
   }
 
   /* Second opinion perk: cross out one wrong answer */
@@ -552,7 +591,7 @@
     Run.choice = choice;
     const correct = choice != null && isRight(t, choice);
     markChoice(t, choice, correct);
-    if (correct) { Sound.thunk(); setTimeout(() => Sound.ding(), 90); }
+    Sound.play(correct ? 'right' : 'miss');
     if (Run.cb) Run.cb(correct, choice, left);
   }
 
@@ -812,6 +851,9 @@
     renderHud();
     renderTray(tray || null);
     lock(350);
+    Sound.undip();
+    soundScene();
+    paintAudio();
   }
 
   /* paper confetti: DOM pieces, gone in under 3 seconds */
@@ -860,7 +902,8 @@
         <button type="button" class="linkbtn" data-act="train-menu">Practice a topic, no clock</button>
         ${prefs.lastCard ? '<button type="button" class="linkbtn" data-act="last-card">See my last card</button>' : ''}
         <button type="button" class="linkbtn" data-act="toggle-extra" aria-pressed="${prefs.extra}">Extra time: ${prefs.extra ? 'on' : 'off'}</button>
-        <button type="button" class="linkbtn" data-act="toggle-sound" aria-pressed="${prefs.sound}">Sound: ${prefs.sound ? 'on' : 'off'}</button>
+        <button type="button" class="linkbtn" data-act="toggle-music"></button>
+        <button type="button" class="linkbtn" data-act="toggle-sfx"></button>
       </div>
       <p class="home-foot">AP Macro, Unit 2. The Bureau is made up.</p>
     </section>`, null);
@@ -967,7 +1010,6 @@
       showVerdict({ right: true, head: hot ? lineFor('hot') : lineFor('right'), amount: '+' + fmt.usd(amount), onNext: soloNext });
     } else {
       revealAnswer(t);
-      Sound.slap();
       so.streak = 0;
       const cola = so.perk === 'cola';
       if (!boss) so.slips++;
@@ -988,7 +1030,7 @@
     if (tore) so.slips--;
     const offer = B.shuffle(so.r, PERKS).slice(0, 3);
     S.screen = 'promo';
-    Sound.fanfare();
+    Sound.play('promoted', { level: so.rank, tore });
     setScreen('promo', 'promo', `<section class="sheet promo">
       <span class="promo-stamp">Promoted</span>
       <h1 class="big">${esc(RANKS[so.rank].name)}</h1>
@@ -1030,7 +1072,7 @@
     so['bossDone' + so.rank] = true;
     so.boss = null;
     if (clean) { so.pay += bonus; if (so.slips > 0) so.slips--; }
-    if (clean) { Sound.fanfare(); confetti(20); }
+    if (clean) { Sound.play('release', { level: so.rank }); confetti(20); }
     setScreen('bossdone', 'boss', `<section class="sheet bossintro">
       <p class="boss-clock" aria-hidden="true">8:30</p>
       <h1 class="big">${clean ? 'Clean release.' : 'It went out.'}</h1>
@@ -1039,7 +1081,7 @@
   }
   function fired() {
     const so = S.solo;
-    Sound.fired();
+    Sound.play('fired');
     setScreen('fired', 'fired', `<section class="sheet fired">
       <h1 class="huge">You are fired.</h1>
       ${so.lastStraw ? `<article class="firing"><p class="firing-h">Reason for firing</p><p>${esc(so.lastStraw.text)}</p><p class="firing-a">The answer was: <b>${esc(so.lastStraw.answer)}</b></p></article>` : ''}
@@ -1066,7 +1108,7 @@
   }
   function soloWin() {
     const so = S.solo;
-    Sound.fanfare();
+    Sound.play('win', { level: 5 });
     setScreen('win', 'promo', `<section class="sheet promo">
       <span class="promo-stamp">Still Employed</span>
       <h1 class="huge">Commissioner.</h1>
@@ -1111,7 +1153,7 @@
     so.payRight = right;
     so.real = q.value + so.bonus;
     $$('[data-act="payq"]').forEach((el, k) => { el.disabled = true; if (k === q.answer) el.classList.add('is-right'); else if (k === i) el.classList.add('is-wrong'); });
-    if (right) Sound.ding(); else Sound.slap();
+    Sound.play(right ? 'right' : 'miss');
     $('#payq-v').innerHTML = `<p class="v-why">${right ? 'Right. +$250.' : esc(q.options[i].why)}</p><p class="v-work">${esc(q.work)}</p>`;
     renderTray({ line: 'See your report.', main: 'See my report', act: 'report' });
     lock(350);
@@ -1160,6 +1202,7 @@
     });
     S.screen = 'review';
     renderHud();
+    soundScene();
   }
   function skipMiss(el) {
     if (!el.dataset.sure) { el.dataset.sure = '1'; el.textContent = 'Tap again to skip it'; return; }
@@ -1259,7 +1302,7 @@
       <h2 class="q">Who is playing?</h2><div class="chipline">${chips}</div>
       <h2 class="q">How many rounds? Every town plays once a round.</h2><div class="chipline">${roundBtns}</div>
       <p class="sheet-note">About ${estMinutes(su.towns.length, su.rounds)} minutes, including the final. Have whiteboards and calculators out for the final.</p>
-      <div class="home-tools"><button type="button" class="linkbtn" data-act="toggle-class-sound" aria-pressed="${prefs.classSound}">Sound: ${prefs.classSound ? 'on' : 'off'}</button><button type="button" class="linkbtn" data-act="home">Back</button></div>
+      <div class="home-tools"><button type="button" class="linkbtn" data-act="toggle-music"></button><button type="button" class="linkbtn" data-act="toggle-sfx"></button><button type="button" class="linkbtn" data-act="home">Back</button></div>
     </section>`, { line: 'Pick the towns and rounds, then start.', main: 'Show the rules', act: 'cup-rules' });
   }
   function cupRules() {
@@ -1366,7 +1409,6 @@
     town.cpi += 5;
     const m = c.missed[t.id] = c.missed[t.id] || { n: 0, desk: t.desk, order: t.order, text: t.text || (t.lines ? t.lines.join(' / ') : ''), answer: answerText(t), why: t.why };
     m.n++;
-    Sound.slap();
     openSteal(t, base);
     renderHud();
     saveCup();
@@ -1377,6 +1419,8 @@
     c.stealOpen = true;
     c.stealShown = false;
     c.stealAmount = B.payFor({ base, mult: t.pay, left: 0.5, streak: 0 });
+    Sound.play('knock');
+    Sound.dipFor(0.3); // the room has to hear who shouted first
     renderHud();
     const slot = $('#verdict-slot');
     slot.innerHTML = `<aside class="verdict steal">
@@ -1391,6 +1435,7 @@
   }
   /* The town tabs stay live after the answer shows, so the teacher can check a shout before paying it. */
   function closeSteal(i) {
+    Sound.undip();
     const c = S.cup;
     if (!c.stealOpen) return;
     clearTimeout(stealTimer);
@@ -1404,7 +1449,7 @@
       c.stealOpen = false;
       head = `${thief.name} steals ${fmt.usd(c.stealAmount)}.`;
       note = '';
-      Sound.ding();
+      Sound.play('steal');
     }
     renderHud();
     saveCup();
@@ -1428,7 +1473,7 @@
       <h1 class="huge call-town">${esc(t.name)}</h1>
       <div class="payrow three"><div><span>Earned this turn</span><b>${fmt.usd(earned)}</b></div><div><span>Tasks right</span><b>${s.right} of ${TURN_TASKS}</b></div><div><span>Prices now</span><b>CPI ${t.cpi}</b></div></div>
     </section>`, { line: nextLine, main: 'Next', act: 'cup-next' });
-    Sound.tick();
+    Sound.play('paper');
   }
   function cupNextTurn() {
     const c = S.cup;
@@ -1455,7 +1500,7 @@
   function halfShow() {
     const c = S.cup;
     $$('.halftable tbody tr').forEach((tr, i) => { const cell = $('.realcell', tr); const t = c.towns[i]; cell.textContent = fmt.usd(B.realPayOf(t.pay, t.cpi)); cell.classList.add('flash'); });
-    Sound.ding();
+    Sound.play('reveal');
     renderTray({ line: 'Back to work.', main: 'Next round', act: 'cup-call' });
     lock(350);
   }
@@ -1486,7 +1531,7 @@
       ${t.ask ? `<p class="final-ask">${esc(t.ask)}</p>` : ''}
       <div class="final-grid">${formHTML(tableHTML(t), 'mini')}<div id="final-answer" aria-live="polite"></div></div>
     </section>`, { line: 'Write your answer. Hold it up when the clock ends.', main: 'Show the answer', act: 'final-show' });
-    Clock.start(secs, () => { Sound.tick(); });
+    Clock.start(secs, () => { Sound.play('knock'); });
   }
   function finalShow() {
     const c = S.cup, t = c.finalSteps[c.finalAt];
@@ -1495,7 +1540,7 @@
     renderHud();
     const a = t.options[t.answer].label;
     $('#final-answer').innerHTML = `<div class="finalans"><p class="v-head"><b>${esc(a)}</b></p><p class="v-why">${esc(t.why)}</p>${t.work && t.work !== t.why ? `<p class="v-work">${esc(t.work)}</p>` : ''}</div>`;
-    Sound.ding();
+    Sound.play('reveal');
     const more = c.finalAt < c.finalSteps.length - 1;
     renderTray({ line: `Tap each town that got it right. ${fmt.usd(FINAL_PAY)} each.`, main: more ? 'Next part' : 'Go to payday', act: 'final-next' });
     lock(350);
@@ -1545,7 +1590,7 @@
     $('#pd-title').textContent = 'Payday: real pay';
     $('#pd-line').textContent = flipped ? `${byPay[0].name} earned the most dollars. ${top.name}'s dollars bought the most. That is real v. nominal.` : tied.length > 1 ? 'A tie for real pay.' : `${top.name} earned the most and kept the most. Prices did not change the order at the top.`;
     $('#pd-win').innerHTML = `<p class="pd-winner" style="--t:var(--t${top.i})">${tied.length > 1 ? 'Tie: ' + tied.map((t) => esc(t.name)).join(' and ') : esc(top.name) + ' wins the Cup.'}</p>`;
-    Sound.fanfare();
+    Sound.play('win', { level: 2 });
     confetti(60);
     c.phase = 'over';
     clearCup();
@@ -1580,10 +1625,12 @@
         ${inTask ? '<button type="button" class="btn ghostdark" data-act="tool-skip">Skip this task</button>' : ''}
         <button type="button" class="btn ghostdark" data-act="tool-final">Jump to the final</button>
         <button type="button" class="btn ghostdark" data-act="tool-payday">Jump to payday</button>
-        <button type="button" class="btn ghostdark" data-act="toggle-class-sound-tool">Sound: ${prefs.classSound ? 'on' : 'off'}</button>
+        <button type="button" class="btn ghostdark" data-act="toggle-music"></button>
+        <button type="button" class="btn ghostdark" data-act="toggle-sfx"></button>
       </div>
       <button type="button" class="btn main" data-act="close-modal">Close</button>
     </div>`;
+    paintAudio();
     if (S.screen === 'task' && Clock.on) { Clock.pausedLeft = Clock.left; Clock.on = false; cancelAnimationFrame(Clock.raf); Clock.wasPaused = true; }
   }
   function closeModal() {
@@ -1612,7 +1659,7 @@
       el.classList.add('used');
       fillSlot(Run.slots.length - 1, i, false);
       if (Run.slots.length === 2) answer(Run.slots.slice());
-      else if (t) Sound.tick();
+      else if (t) Sound.play('tap');
     },
     unslot(el) {
       const s = Number(el.dataset.s);
@@ -1628,8 +1675,8 @@
       if (t.answer.includes(i)) {
         Run.got.add(i);
         el.classList.add('is-right');
-        Sound.tick();
         if (Run.got.size === t.answer.length) answer('all');
+        else Sound.play('check', { step: Run.got.size - 1 });
       } else {
         el.classList.add('is-wrong');
         answer(i);
@@ -1642,8 +1689,8 @@
         Run.seq.push(i);
         el.classList.add('is-right');
         const num = $('.ordnum', el); if (num) num.textContent = Run.seq.length;
-        Sound.tick();
         if (Run.seq.length === t.answer.length) answer('all');
+        else Sound.play('check', { step: Run.seq.length - 1 });
       } else {
         el.classList.add('is-wrong');
         answer(i);
@@ -1666,7 +1713,7 @@
       const r = Number(el.dataset.r);
       Run.arrows[r] = el.dataset.v;
       $$(`.segbtn[data-r="${r}"]`).forEach((b) => b.classList.toggle('on', b === el));
-      Sound.tick();
+      Sound.play('tap');
       const go = $('#arrows-go');
       if (go) go.disabled = Run.t.rows.some((row, i) => !Run.arrows[i]);
     },
@@ -1677,8 +1724,8 @@
       const c = t.cards[Run.pileAt];
       if (Number(el.dataset.v) === c.bin) {
         Run.pileAt++;
-        Sound.thunk();
         if (Run.pileAt >= t.cards.length) { Run.pileAt = t.cards.length - 1; answer('all'); return; }
+        Sound.play('file', { step: Run.pileAt - 1 });
         $('#pile-count').textContent = `Card ${Run.pileAt + 1} of ${t.cards.length}`;
         $('#pile-text').textContent = t.cards[Run.pileAt].t;
         const f = $('.form'); if (f && f.animate && !reduced()) f.animate([{ transform: 'translateX(1.4rem) rotate(1deg)', opacity: 0.2 }, { transform: 'rotate(-.35deg)', opacity: 1 }], { duration: 180 });
@@ -1702,8 +1749,8 @@
       Run.frq.push(i);
       const slot = $(`.blankslot[data-b="${b}"]`);
       if (slot) { slot.textContent = t.blanks[b].options[i]; slot.classList.remove('active'); }
-      Sound.tick();
       if (Run.frq.length === t.blanks.length) { answer(Run.frq.slice()); return; }
+      Sound.play('tap');
       const nextSlot = $(`.blankslot[data-b="${Run.frq.length}"]`); if (nextSlot) nextSlot.classList.add('active');
       $('#frqopts').innerHTML = frqOptions(t, Run.frq.length);
       lock(120);
@@ -1715,8 +1762,8 @@
       if (Number(el.dataset.i) === st.answer) {
         writeSpot(t, st);
         Run.li++;
-        Sound.tick();
         if (Run.li >= t.steps.length) { answer('all'); return; }
+        Sound.play('check', { step: Run.li - 1 });
         lightSpot(t);
       } else {
         el.classList.add('is-wrong');
@@ -1725,7 +1772,7 @@
       }
     },
     lunch() { const so = S.solo; if (!so || Run.done) return; so.lunchUsed = true; Run.done = true; Clock.stop(); so.inRank++; soloNext(); },
-    perk(el) { choosePerk(el.dataset.id); },
+    perk(el) { Sound.play('tap'); choosePerk(el.dataset.id); },
     'boss-go': runBossStep,
     status(el) { statusChosen(el.dataset.v); },
     payday,
@@ -1738,15 +1785,15 @@
     overtime: startOvertime,
     'last-card': lastCard,
     'toggle-extra'() { prefs.extra = !prefs.extra; savePrefs(); home(); },
-    'toggle-sound'() { prefs.sound = !prefs.sound; savePrefs(); Sound.unlock(); Sound.tick(); home(); },
+    'toggle-music'() { toggleAudio('music'); },
+    'toggle-sfx'() { toggleAudio('sfx'); },
+    mute() { toggleMute(); },
     'train-menu': trainMenu,
     'train-go'(el) { trainGo(el.dataset.desk); },
     'train-stop'() { Run.done = true; Clock.stop(); trainStop(); },
     'cup-setup': cupSetup,
     'toggle-town'(el) { const su = S.setup, t = el.dataset.town; if (su.towns.includes(t)) { if (su.towns.length > 2) su.towns = su.towns.filter((x) => x !== t); } else su.towns = TOWNS.filter((x) => su.towns.includes(x) || x === t); drawSetup(); },
     'set-rounds'(el) { S.setup.rounds = Number(el.dataset.r); drawSetup(); },
-    'toggle-class-sound'() { prefs.classSound = !prefs.classSound; savePrefs(); Sound.unlock(); drawSetup(); },
-    'toggle-class-sound-tool'() { prefs.classSound = !prefs.classSound; savePrefs(); openTools(); },
     'cup-rules': cupRules,
     'cup-start': cupStart,
     'cup-resume': cupResume,
@@ -1759,7 +1806,7 @@
       const c = S.cup, i = Number(el.dataset.i);
       if (!c) return;
       if (c.stealOpen) { if (i !== c.turn) closeSteal(i); return; }
-      if (c.finalOpen) { c.finalPicked[i] = !c.finalPicked[i]; Sound.tick(); renderHud(); }
+      if (c.finalOpen) { c.finalPicked[i] = !c.finalPicked[i]; Sound.play('tap'); renderHud(); }
     },
     'final-part': finalPart,
     'final-show': finalShow,
@@ -1784,6 +1831,7 @@
     if (!Run.sel || Run.sel.side === side) {
       $$('.mbtn.sel').forEach((b) => b.classList.remove('sel'));
       Run.sel = { side, i, el };
+      Sound.play('tap');
       el.classList.add('sel');
       return;
     }
@@ -1793,8 +1841,8 @@
     if (t.answer[l] === r) {
       [el, other].forEach((b) => { b.classList.add('is-right'); const m = $('.mbadge', b); if (m) m.textContent = 'ABCD'[Run.matched]; });
       Run.matched++;
-      Sound.tick();
       if (Run.matched === t.left.length) answer('all');
+      else Sound.play('check', { step: Run.matched - 1 });
     } else {
       [el, other].forEach((b) => b.classList.add('is-wrong'));
       answer({ l, r });
@@ -1809,6 +1857,7 @@
     else if (Run.typed.replace(/[^\d]/g, '').length < 9) Run.typed += k;
     const out = $('#typed'); if (out) out.textContent = Run.typed;
     const go = $('#type-go'); if (go) go.disabled = !/\d/.test(Run.typed);
+    Sound.play('key');
   }
   function tapWaveAt(x) {
     const t = Run.t;
@@ -1823,7 +1872,7 @@
     }
     answer(xx);
   }
-  const NO_LOCK = new Set(['fix', 'close-modal', 'tools', 'town-tap', 'no-steal', 'tile', 'grab', 'unslot', 'orderpick', 'matchL', 'matchR', 'keypad', 'typed-go', 'dial-go', 'arrowset', 'arrows-go', 'pilebin', 'wavetap', 'frqpick', 'labelpick', 'toggle-town', 'set-rounds', 'toggle-class-sound', 'toggle-class-sound-tool']);
+  const NO_LOCK = new Set(['fix', 'close-modal', 'tools', 'town-tap', 'no-steal', 'tile', 'grab', 'unslot', 'orderpick', 'matchL', 'matchR', 'keypad', 'typed-go', 'dial-go', 'arrowset', 'arrows-go', 'pilebin', 'wavetap', 'frqpick', 'labelpick', 'toggle-town', 'set-rounds', 'toggle-music', 'toggle-sfx', 'mute']);
   function clearCupIfOver() { if (S.cup && S.cup.phase === 'over') S.cup = null; }
 
   document.addEventListener('click', (e) => {
@@ -1841,6 +1890,7 @@
     if (e.target && e.target.id === 'dial' && Run.t && Run.t.dial) {
       const read = $('#dial-read');
       if (read) { read.textContent = dialText(Run.t, e.target.value); read.classList.remove('untouched'); }
+      Sound.dial();
       const go = $('#dial-go'); if (go) go.disabled = false;
     }
   });
@@ -1848,6 +1898,7 @@
     if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName) && e.key !== 'Enter') return;
     if (e.target && e.target.id === 'dial' && e.key === 'Enter') { const go = $('.lockbtn'); if (go) { e.preventDefault(); go.click(); } return; }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'm' || e.key === 'M') { e.preventDefault(); Sound.unlock(); toggleMute(); return; }
     const live = Run.t && S.screen === 'task' && !Run.done ? Run.t : null;
     if (live && live.verb === 'type') {
       if (/^[0-9.]$/.test(e.key)) { e.preventDefault(); typeKey(e.key); return; }
@@ -1873,7 +1924,7 @@
 
   /* ================= test hook, used only by tools/playtest.py ================= */
   window.__se = {
-    S, Run, B,
+    S, Run, B, sound: Sound,
     screen: () => S.screen,
     rightChoice() {
       const t = Run.t; if (!t) return null;

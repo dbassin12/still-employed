@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Still Employed Safari check</title></head>
+<body style="margin:0;font:16px system-ui;background:#fff">
+<p id="status" style="margin:8px">Checking Still Employed in Safari. Nothing here needs you, and it finishes by itself.</p>
+<iframe id="game" title="game" src="/dist/index.html" style="width:390px;height:844px;border:1px solid #999"></iframe>
+<script>
+(async function () {
+  const out = { ua: navigator.userAgent, errors: [], screens: [], verbs: [], overflow: [], covered: [] };
+  const status = document.getElementById('status');
+  // Safari all but stops timers in a hidden page, so pace with messages, which it does not slow down.
+  const channel = new MessageChannel();
+  const breathe = () => new Promise((r) => { channel.port1.onmessage = () => r(); channel.port2.postMessage(0); });
+  const wait = async (ms) => { const end = performance.now() + ms; do { await breathe(); } while (performance.now() < end); };
+  const frame = document.getElementById('game');
+  const send = async () => {
+    try { await fetch('/report', { method: 'POST', body: JSON.stringify(out) }); status.textContent = 'Finished. You can close this.'; } catch (e) { status.textContent = 'Could not report: ' + e; }
+  };
+  window.addEventListener('error', (e) => out.errors.push('harness: ' + e.message));
+  const stage = (name) => { fetch('/progress', { method: 'POST', body: JSON.stringify({ stage: name, hidden: document.hidden, errors: out.errors.length, ms: Math.round(performance.now()) }) }).catch(() => {}); };
+  stage('page running');
+
+  async function load() {
+    frame.src = '/dist/index.html?' + Math.random();
+    await new Promise((r) => { frame.onload = r; });
+    stage('game frame loaded');
+    await wait(700);
+    const w = frame.contentWindow;
+    w.addEventListener('error', (e) => out.errors.push(String(e.message) + ' @' + e.lineno));
+    w.addEventListener('unhandledrejection', (e) => out.errors.push('rejection: ' + (e.reason && e.reason.message || e.reason)));
+    return w;
+  }
+  function look(w) {
+    const d = w.document, se = w.__se, scr = se.S.screen;
+    if (!out.screens.includes(scr)) out.screens.push(scr);
+    const wide = d.documentElement.scrollWidth - d.documentElement.clientWidth;
+    if (wide > 0) out.overflow.push(`${scr}: ${wide}px`);
+    const m = d.querySelector('#mute');
+    if (m && !m.hidden) {
+      const a = m.getBoundingClientRect();
+      d.querySelectorAll('#hud b, #hud span, #stage h1, #stage h2, #stage p, #stage button').forEach((el) => {
+        if (!el.offsetParent) return;
+        const b = el.getBoundingClientRect();
+        const r = d.createRange(); r.selectNodeContents(el);
+        const boxes = el.tagName === 'BUTTON' ? [b] : Array.from(r.getClientRects());
+        for (const x of boxes) if (x.width && x.height && x.left < a.right && x.right > a.left && x.top < a.bottom && x.bottom > a.top) { out.covered.push(`${scr}: ${el.tagName} ${(el.textContent || '').trim().slice(0, 24)}`); break; }
+      });
+    }
+  }
+  const mainBtn = (d) => d.querySelector('#tray .btn.main, .v-next');
+
+  try {
+    // 1. A clean run through two promotions and a Release, at iPhone width.
+    let w = await load();
+    out.hasGame = typeof w.__se === 'object';
+    out.hasAudio = typeof w.SE_AUDIO === 'object';
+    let d = w.document, se = w.__se;
+    out.homeTools = d.querySelector('.home-tools').innerText;
+    out.stateBeforeTap = se.sound.state();
+    look(w);
+    d.querySelector('#go-solo').click();
+    await wait(600);
+    let steps = 0, tasks = 0;
+    while (steps++ < 90 && tasks < 26) {
+      se.unlock();
+      look(w);
+      const scr = se.S.screen;
+      if (scr === 'task') {
+        const verb = se.Run.t.verb;
+        if (!out.verbs.includes(verb)) out.verbs.push(verb);
+        se.answerRight();
+        await wait(60);
+        look(w);
+        se.unlock();
+        se.next();
+        tasks++;
+      } else if (scr === 'promo') {
+        d.querySelector('.perk').click();
+      } else {
+        const b = mainBtn(d);
+        if (!b) break;
+        b.click();
+      }
+      await wait(60);
+    }
+    out.tasksPlayed = tasks;
+    out.stateAfterRun = se.sound.state();
+    out.heard = Array.from(new Set(se.sound.log()));
+    d.querySelector('#mute').click();
+    await wait(150);
+    out.afterMute = { pressed: d.querySelector('#mute').getAttribute('aria-pressed'), state: se.sound.state().playing };
+    d.querySelector('#mute').click();
+
+    stage('clean run done: ' + tasks + ' tasks');
+    // 2. Fired, the survey, payday, and the report.
+    se.reset();
+    w = await load();
+    d = w.document; se = w.__se;
+    d.querySelector('#go-solo').click();
+    await wait(500);
+    steps = 0;
+    let wrong = 0;
+    while (steps++ < 40) {
+      se.unlock();
+      look(w);
+      const scr = se.S.screen;
+      if (scr === 'task') {
+        const verb = se.Run.t.verb;
+        if (!out.verbs.includes(verb)) out.verbs.push(verb);
+        if (wrong < 4) { se.answerWrong(); wrong++; } else se.answerRight();
+        await wait(50);
+        se.unlock();
+        se.next();
+      } else if (scr === 'fired') {
+        d.querySelector('[data-act="status"]').click();
+      } else if (scr === 'payday') {
+        const pick = d.querySelector('[data-act="payq"]:not([disabled])');
+        if (pick) pick.click(); else { const b = mainBtn(d); if (!b) break; b.click(); }
+      } else if (scr === 'report' || scr === 'name' || scr === 'card') {
+        look(w);
+        break;
+      } else {
+        const b = mainBtn(d);
+        if (!b) break;
+        b.click();
+      }
+      await wait(60);
+    }
+    out.firedRun = { lastScreen: se.S.screen, log: Array.from(new Set(se.sound.log())) };
+
+    stage('fired run done at ' + se.S.screen);
+    // 3. The real audio chain, rendered by Safari's own engine.
+    const t0 = performance.now();
+    const buf = await w.SE_AUDIO.renderClip({ seconds: 12, seed: 3, events: [{ t: 0, scene: 'work', level: 3 }, { t: 2, sfx: 'right' }, { t: 5, sfx: 'miss' }, { t: 8, sfx: 'promoted', o: { level: 4, tore: true } }, { t: 8.01, scene: 'work', level: 4 }] });
+    const l = buf.getChannelData(0), r = buf.getChannelData(1);
+    let bad = 0, peak = 0, sum = 0;
+    for (let i = 0; i < l.length; i++) { if (!Number.isFinite(l[i]) || !Number.isFinite(r[i])) bad++; peak = Math.max(peak, Math.abs(l[i]), Math.abs(r[i])); sum += l[i] * l[i]; }
+    out.render = { ms: Math.round(performance.now() - t0), bad, peak: +peak.toFixed(3), rms: +Math.sqrt(sum / l.length).toFixed(4), sampleRate: buf.sampleRate };
+
+    stage('render done');
+    // 4. What this browser has.
+    const AC = w.AudioContext || w.webkitAudioContext;
+    const ctx = new AC();
+    out.apis = { stereoPanner: !!ctx.createStereoPanner, resume: typeof ctx.resume, suspend: typeof ctx.suspend, state: ctx.state, sampleRate: ctx.sampleRate };
+    if (ctx.close) ctx.close();
+  } catch (e) {
+    out.errors.push('harness caught: ' + (e && e.stack || e));
+  }
+  await send();
+})();
+</script>
+</body>
+</html>

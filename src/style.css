@@ -109,6 +109,14 @@ kbd { display: none; font: 700 .72rem/1 var(--body); }
 
 /* ================= HUD ================= */
 .hud { flex: none; display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .5rem max(16px, .85rem); background: rgba(0, 0, 0, .24); }
+.hud.solo { padding-right: 3.3rem; }
+#mute { position: fixed; z-index: 40; top: calc(env(safe-area-inset-top, 0px) + .5rem); right: max(.55rem, env(safe-area-inset-right, 0px)); width: 2.5rem; height: 2.5rem; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: rgba(0, 0, 0, .3); color: var(--on-wall); }
+#mute[hidden] { display: none; }
+#mute svg { width: 1.45rem; height: 1.45rem; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+#mute .spk { fill: currentColor; stroke-width: 1; }
+#mute .off { display: none; }
+#mute[aria-pressed="true"] .wave { display: none; }
+#mute[aria-pressed="true"] .off { display: inline; }
 .hud b { font-family: var(--slab); font-weight: 400; }
 .hud span { display: block; font-size: .8rem; color: var(--on-wall-soft); }
 .hud-rank b { font-size: 1.05rem; line-height: 1.1; display: block; }
