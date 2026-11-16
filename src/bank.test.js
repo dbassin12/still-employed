@@ -678,3 +678,75 @@ test('type prompts read cleanly', () => {
     if (t.order === 'REAL GROWTH?') assert.ok(!/^In billions|\. In billions/.test(t.ask), `${t.id}: ${t.ask}`);
   }
 });
+
+// ================= test-style tables (added Nov 16, 2026) =================
+// Recomputed here from the table rows the student sees, not from the bank's records.
+const num = (s) => Number(String(s).replace(/−/g, '-').replace(/[$,%]|billion|million/g, '').trim());
+const SPEND = /^(Consumption spending|Personal consumption expenditures|Household consumption|Gross private domestic investment|Investment spending|Private investment|Government purchases|Exports|Imports|Net exports)$/;
+const INCOME = /^(Wages|Rent|Interest|Profit|Employee compensation)$/;
+const drillTasks = every.filter((t) => B.KINDS.find((k) => k.id === t.kind).drill);
+
+test('test-style tables: every drill kind deals, and there are enough of them', () => {
+  const kinds = new Set(drillTasks.map((t) => t.kind));
+  ['m-gdp', 'm-mixed', 'm-income', 'm-urate', 'm-lfpr', 'm-lfu', 'm-gapcall', 'm-gapword', 'm-stock'].forEach((k) => assert.ok(kinds.has(k), k + ' is missing'));
+  assert.ok(drillTasks.length >= 55, 'only ' + drillTasks.length + ' drill tasks');
+});
+
+test('test-style tables: the key uses only the right rows, and some rows are left out', () => {
+  for (const t of drillTasks.filter((x) => x.verb === 'pick')) {
+    const rows = t.table.map(([l, v]) => [l, num(v)]);
+    let want;
+    if (t.kind === 'm-gdp' || t.kind === 'm-mixed') {
+      const used = rows.filter(([l]) => SPEND.test(l));
+      want = used.reduce((s, [l, v]) => s + (l === 'Imports' ? -v : v), 0);
+      assert.ok(used.length < rows.length, t.id + ' has no rows to leave out');
+    } else if (t.kind === 'm-income') {
+      const used = rows.filter(([l]) => INCOME.test(l));
+      want = used.reduce((s, [, v]) => s + v, 0);
+      assert.ok(used.length < rows.length, t.id + ' has no rows to leave out');
+    } else if (t.kind === 'm-urate') {
+      const u = rows.find(([l]) => l === 'Unemployed')[1], e = rows.find(([l]) => l === 'Employed')[1];
+      want = u / (u + e) * 100;
+    } else if (t.kind === 'm-lfpr') {
+      const u = rows.find(([l]) => l === 'Unemployed')[1], e = rows.find(([l]) => l === 'Employed')[1];
+      want = (u + e) / rows[1][1] * 100;
+    } else if (t.kind === 'm-lfu') {
+      const lf = rows.find(([l]) => l === 'Labor force')[1], e = rows.find(([l]) => l === 'Employed')[1];
+      want = (lf - e) / lf * 100;
+    }
+    assert.ok(Math.abs(want - t.calc.value) < 1e-6, `${t.id}: rows give ${want}, bank says ${t.calc.value}`);
+    assert.equal(t.options[t.answer].label, t.calc.shown, t.id);
+    t.options.filter((o, i) => i !== t.answer).forEach((o) => assert.notEqual(o.why, 'Check the arithmetic.', `${t.id}: ${o.label} has no named mistake`));
+  }
+});
+
+test('test-style tables: the gap call matches the unemployment rate the student can work out', () => {
+  const KEY = { 'Recessionary gap': 1, 'Inflationary gap': -1, 'Full employment': 0 };
+  for (const t of drillTasks.filter((x) => x.kind === 'm-gapcall')) {
+    let lf, e, nat;
+    if (t.table) { lf = num(t.table[0][1]); e = num(t.table[1][1]); nat = num(t.table[2][1]); }
+    else { [lf, e, nat] = (t.text.match(/\d+(?:\.\d+)?/g) || []).map(Number); }
+    const u = Math.round((lf - e) / lf * 1000) / 10;
+    assert.equal(KEY[t.options[t.answer].label], Math.sign(u - nat), `${t.id}: ${u}% v. ${nat}%`);
+  }
+});
+
+test('the Test tables practice topic deals only drill kinds, and reaches all of them', () => {
+  const r = B.rng(11), seen = new Set(), got = new Set();
+  for (let i = 0; i < 400; i++) {
+    const t = B.trainingTask(B.DRILL.key, r, seen);
+    assert.ok(B.KINDS.find((k) => k.id === t.kind).drill, t.id + ' is not a drill task');
+    got.add(t.kind);
+  }
+  assert.equal(got.size, B.KINDS.filter((k) => k.drill).length);
+});
+
+test('test-style tables share no more than two numbers with any table on the real test', { skip: !guard || !guard.tables }, () => {
+  for (const t of drillTasks.filter((x) => x.table)) {
+    const mine = new Set(t.table.map(([, v]) => num(v)));
+    for (const real of guard.tables) {
+      const same = real.filter((v) => mine.has(v)).length;
+      assert.ok(same <= 2, `${t.id} shares ${same} numbers with a test table`);
+    }
+  }
+});

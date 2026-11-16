@@ -1505,7 +1505,10 @@ body.answered .keypad { display: none; }
     leisure: { label: 'Leisure', def: 'Time off counts as $0' },
     quality: { label: 'Quality', def: 'Better goods at the same price' },
     environment: { label: 'Environment', def: 'Damage is never subtracted' },
-    division: { label: 'Who gets it', def: 'GDP ignores how income is divided' },
+    division: { label: 'Who gets it', def: 'GDP ignores the distribution of income' },
+    recgap: { label: 'Recessionary gap', def: 'Negative gap: real GDP below potential' },
+    infgap: { label: 'Inflationary gap', def: 'Positive gap: real GDP above potential' },
+    fullemp: { label: 'Full employment', def: 'No gap: real GDP equals potential' },
     gains: { label: 'Gains', def: 'Helped: pays fixed dollars that buy less' },
     loses: { label: 'Loses', def: 'Hurt: holds or gets fixed dollars' },
     protected: { label: 'Protected', def: 'Little effect: tied to prices' },
@@ -2584,6 +2587,208 @@ body.answered .keypad { display: none; }
   kind('elastic', 'micro', 'stamp', MICRO_ELASTIC, (x) => stampTask({ desk: 'micro', lvl: x.lvl, order: 'FLASHBACK: ELASTIC?', ask: 'Is demand elastic or inelastic?', text: x.t, options: plain('Elastic', 'Inelastic').map((b) => Object.assign(b, { stampClass: 'neutral' })), key: x.key, why: x.y }));
   kind('c-surplus', 'micro', 'pick', SURPLUS, (s, r) => GEN.surplus(s, r, 1));
 
+  /* ================= test-style tables (added Nov 16, 2026) =================
+     The other math tables in this game are clean. AP tables are not: they mix in taxes, depreciation, transfers,
+     income items, or the whole population, and the student has to pick the right rows. These kinds drill that,
+     plus the words "recessionary gap" and "inflationary gap", plus inventories of goods made abroad.
+     New numbers only. Never copy the teacher's test. Every kind here has drill: true, so Practice a topic can deal
+     them as their own topic (DRILL), and the Solo deal leans on them a little. */
+  const DRILL = { key: 'drill', code: 'Test tables', long: 'Messy tables and gaps' };
+  const cell = (n) => sign(n) + comma(n);
+  const NAMES = [
+    { c: 'Consumption spending', i: 'Gross private domestic investment', g: 'Government purchases' },
+    { c: 'Personal consumption expenditures', i: 'Investment spending', g: 'Government purchases' },
+    { c: 'Household consumption', i: 'Private investment', g: 'Government purchases' },
+  ];
+  const JUNK_WHY = {
+    tax: 'Taxes are not spending on new goods. Leave them out.',
+    transfer: 'Transfers buy nothing new. They are not in GDP.',
+    dep: 'Depreciation is not a spending line. Leave it out.',
+    income: 'Wages are income, not spending. Do not mix the two approaches.',
+    used: 'Used goods were counted when they were new.',
+    stock: 'Stocks and bonds change who owns what. Nothing is made.',
+  };
+  // x and m are exports and imports. nx: true shows one "Net exports" row (x − m) instead.
+  const MESSY_GDP = [
+    { k: 'mg1', lvl: 2, n: 0, c: 420, i: 90, g: 130, x: 60, m: 85, junk: [['Personal income taxes', 110, 'tax']] },
+    { k: 'mg2', lvl: 3, n: 0, c: 900, i: 210, g: 300, x: 150, m: 190, nx: true, junk: [['Depreciation', 120, 'dep'], ['Corporate profit taxes', 60, 'tax']] },
+    { k: 'mg3', lvl: 2, n: 1, c: 260, i: 55, g: 80, x: 35, m: 30, junk: [['Wages', 190, 'income']] },
+    { k: 'mg4', lvl: 2, n: 2, c: 640, i: 150, g: 210, x: 90, m: 120, nx: true, junk: [['Social Security checks', 95, 'transfer'], ['Depreciation', 80, 'dep']] },
+    { k: 'mg5', lvl: 3, n: 1, c: 1500, i: 320, g: 450, x: 240, m: 300, nx: true, junk: [['Indirect business taxes', 140, 'tax'], ['Purchases of stocks and bonds', 400, 'stock']] },
+    { k: 'mg6', lvl: 2, n: 0, c: 85, i: 20, g: 30, x: 15, m: 22, junk: [['Transfer payments', 18, 'transfer']] },
+    { k: 'mg7', lvl: 3, n: 2, c: 550, i: 125, g: 170, x: 70, m: 65, nx: true, junk: [['Transfer payments', 90, 'transfer'], ['Corporate profit taxes', 45, 'tax']] },
+    { k: 'mg8', lvl: 3, n: 1, c: 2100, i: 480, g: 600, x: 350, m: 500, nx: true, junk: [['Wages and salaries', 1500, 'income'], ['Personal income taxes', 380, 'tax']] },
+    { k: 'mg9', lvl: 2, n: 2, c: 330, i: 85, g: 105, x: 45, m: 60, junk: [['Purchases of used cars', 35, 'used']] },
+  ];
+  // Spending rows plus one or two income rows (never all four), so only the spending rows give GDP.
+  const MIXED_GDP = [
+    { k: 'mx1', lvl: 3, n: 0, c: 300, i: 70, g: 90, x: 40, m: 60, nx: true, inc: [['Wages', 250], ['Profit', 90]] },
+    { k: 'mx2', lvl: 2, n: 1, c: 52, i: 13, g: 16, x: 8, m: 11, inc: [['Wages', 44]] },
+    { k: 'mx3', lvl: 3, n: 2, c: 720, i: 160, g: 240, x: 110, m: 80, nx: true, inc: [['Employee compensation', 690], ['Interest', 70]] },
+    { k: 'mx4', lvl: 3, n: 0, c: 34, i: 9, g: 8, x: 4, m: 7, nx: true, inc: [['Wages', 30], ['Rent', 4]] },
+    { k: 'mx5', lvl: 2, n: 1, c: 1100, i: 260, g: 340, x: 180, m: 230, inc: [['Profit', 310]] },
+  ];
+  // All four income rows plus two spending rows (never all of them), so only the income rows give GDP.
+  const MIXED_INC = [
+    { k: 'mi1', lvl: 2, w: 520, re: 40, n: 60, p: 180, spend: [['Consumption spending', 540], ['Government purchases', 150]] },
+    { k: 'mi2', lvl: 2, w: 310, re: 25, n: 35, p: 130, spend: [['Consumption spending', 330], ['Investment spending', 85]] },
+    { k: 'mi3', lvl: 3, w: 1400, re: 120, n: 150, p: 530, spend: [['Consumption spending', 1500], ['Government purchases', 420]] },
+  ];
+  // [population of all ages, working-age population, unemployed, employed]
+  const POP_JOBS = [
+    { k: 'pj1', lvl: 2, t: 500, a: 400, u: 24, e: 276, al: 0 },
+    { k: 'pj2', lvl: 2, t: 1000, a: 800, u: 30, e: 570, al: 1 },
+    { k: 'pj3', lvl: 2, t: 2000, a: 1500, u: 90, e: 1110, al: 2 },
+    { k: 'pj4', lvl: 3, t: 350, a: 280, u: 21, e: 189, al: 0 },
+    { k: 'pj5', lvl: 3, t: 800, a: 640, u: 32, e: 368, al: 1 },
+    { k: 'pj6', lvl: 3, t: 1200, a: 900, u: 36, e: 684, al: 2 },
+  ];
+  const ADULT_LABELS = [['Total population', 'Working-age population'], ['Population, all ages', 'Adults 16 and older'], ['Everyone in the country', 'Adult population']];
+  // [population, labor force, employed]: no unemployed row, so the student finds it first
+  const POP_LF = [
+    { k: 'pl1', lvl: 2, p: 400000, lf: 250000, e: 230000 },
+    { k: 'pl2', lvl: 2, p: 90000, lf: 60000, e: 57000 },
+    { k: 'pl3', lvl: 3, p: 5000, lf: 3200, e: 2944 },
+    { k: 'pl4', lvl: 2, p: 1500000, lf: 1000000, e: 940000 },
+    { k: 'pl5', lvl: 3, p: 72000, lf: 48000, e: 44160 },
+    { k: 'pl6', lvl: 3, p: 600000, lf: 420000, e: 399000 },
+  ];
+  // labor force and employed in tenths of a million, natural rate in percent
+  const GAP_CALLS = [
+    { k: 'gc1', lvl: 2, lf: 500, e: 460, nat: 5, table: true },
+    { k: 'gc2', lvl: 2, lf: 800, e: 776, nat: 4.5 },
+    { k: 'gc3', lvl: 2, lf: 600, e: 570, nat: 5, table: true },
+    { k: 'gc4', lvl: 3, lf: 250, e: 235, nat: 4 },
+    { k: 'gc5', lvl: 3, lf: 1200, e: 1152, nat: 4.5, table: true },
+    { k: 'gc6', lvl: 3, lf: 2000, e: 1890, nat: 5.5 },
+    { k: 'gc7', lvl: 2, lf: 700, e: 651, nat: 4.5, table: true },
+    { k: 'gc8', lvl: 3, lf: 1500, e: 1455, nat: 4 },
+  ];
+  const GAP_WORDS = [
+    { k: 'gw1', lvl: 1, t: 'The output gap is negative.', key: 'recgap', y: 'A negative gap is a recessionary gap. Real GDP is below potential.' },
+    { k: 'gw2', lvl: 1, t: 'The output gap is positive.', key: 'infgap', y: 'A positive gap is an inflationary gap. Real GDP is above potential.' },
+    { k: 'gw3', lvl: 1, t: 'Real GDP is $60 billion below potential real GDP.', key: 'recgap', y: 'Below potential is a recessionary gap.' },
+    { k: 'gw4', lvl: 1, t: 'Real GDP is $45 billion above potential real GDP.', key: 'infgap', y: 'Above potential is an inflationary gap.' },
+    { k: 'gw5', lvl: 1, t: 'Actual real GDP equals potential real GDP.', key: 'fullemp', y: 'No gap. The economy is at full employment.' },
+    { k: 'gw6', lvl: 2, t: 'Unemployment is 7%. The natural rate is 5%.', key: 'recgap', y: 'Unemployment above the natural rate means real GDP is below potential.' },
+    { k: 'gw7', lvl: 2, t: 'Unemployment is 3.5%. The natural rate is 4.5%.', key: 'infgap', y: 'Unemployment below the natural rate means real GDP is above potential.' },
+    { k: 'gw8', lvl: 2, t: 'Unemployment equals the natural rate.', key: 'fullemp', y: 'At the natural rate there is no cyclical unemployment. Full employment.' },
+    { k: 'gw9', lvl: 2, t: 'Cyclical unemployment is 1.5%.', key: 'recgap', y: 'Cyclical unemployment above zero means real GDP is below potential.' },
+    { k: 'gw10', lvl: 2, t: 'Cyclical unemployment is zero.', key: 'fullemp', y: 'No cyclical unemployment means full employment, at potential.' },
+    { k: 'gw11', lvl: 3, t: 'Cyclical unemployment is negative.', key: 'infgap', y: 'Unemployment is below the natural rate, so real GDP is above potential.' },
+    { k: 'gw12', lvl: 2, t: 'The economy is at a trough.', key: 'recgap', y: 'At a trough, real GDP is at its lowest point, below potential. Recessionary gap.' },
+  ];
+  const STOCKS = [
+    { k: 'st1', lvl: 2, t: 'A Lawrence store ends the year with more Italian-made sneakers on its shelves.', key: 'out', y: 'Investment goes up, but imports go up by the same amount. U.S. GDP does not change.' },
+    { k: 'st2', lvl: 2, t: 'A Hewlett car dealer ends the year with more Japanese-made cars on its lot.', key: 'out', y: 'Inventories rise, but so do imports, by the same amount. U.S. GDP does not change.' },
+    { k: 'st3', lvl: 2, t: 'A Brooklyn furniture maker ends the year with more unsold chairs it built this year.', key: 'in', y: 'Made here this year and not sold yet. A rise in inventories counts as investment.' },
+    { k: 'st4', lvl: 3, t: 'A Five Towns grocery ends the year with more Israeli-made olive oil in its storeroom.', key: 'out', y: 'Made abroad. Inventories and imports rise together, so U.S. GDP does not change.' },
+    { k: 'st5', lvl: 2, t: 'A Long Island bike shop ends the year with more bikes made this year in Ohio.', key: 'in', y: 'New and made in the U.S. A rise in inventories counts as investment.' },
+    { k: 'st6', lvl: 3, t: "A Cedarhurst toy store sells toys it had in stock since last year.", key: 'out', y: 'Made last year and counted then, as inventory. C goes up, inventories go down. No change.' },
+  ];
+
+  const spendRows = (o, r) => {
+    const nm = NAMES[o.n || 0];
+    const rows = [[nm.c, o.c], [nm.i, o.i], [nm.g, o.g]];
+    if (o.nx) rows.push(['Net exports', o.x - o.m]); else rows.push(['Exports', o.x], ['Imports', o.m]);
+    return rows;
+  };
+  const xnWork = (o) => (o.nx ? `(${cell(o.x - o.m)})` : `(${fmt.num(o.x)} ${MINUS} ${fmt.num(o.m)})`);
+  const flipWhy = (o) => (o.nx ? (o.x - o.m < 0 ? 'Net exports are negative here. Subtract them.' : 'Net exports are positive here. Add them.') : 'Imports are subtracted, not added.');
+  const flipVal = (o) => (o.nx ? o.c + o.i + o.g - (o.x - o.m) : o.c + o.i + o.g + o.x + o.m);
+  const tableOf = (rows, r) => shuffle(r, rows).map(([l, v]) => [l, cell(v)]);
+
+  GEN.messygdp = (o, r) => {
+    const val = o.c + o.i + o.g + o.x - o.m;
+    const junkSum = o.junk.reduce((s, j) => s + j[1], 0);
+    const rows = spendRows(o, r).concat(o.junk.map((j) => [j[0], j[1]]));
+    const work = `${fmt.num(o.c)} + ${fmt.num(o.i)} + ${fmt.num(o.g)} + ${xnWork(o)} = ${fmt.num(val)}`;
+    return numTask({
+      r, desk: 'gdp', lvl: o.lvl, order: 'GDP FROM A FULL TABLE?', ask: 'Use the expenditure approach. In billions of dollars.', fmt: fmt.bil, table: tableOf(rows, r),
+      value: val, calcF: 'gdp', calcIn: { c: o.c, i: o.i, g: o.g, x: o.x, m: o.m }, formula: F.gdp,
+      wrongs: [{ v: val + junkSum, why: 'Only C, I, G, and Xn count. Leave the other rows out.' }, { v: val + o.junk[0][1], why: JUNK_WHY[o.junk[0][2]] }, { v: flipVal(o), why: flipWhy(o) }, { v: o.c + o.i + o.g, why: 'That leaves out net exports.' }],
+      work, why: 'Only spending on new final goods: ' + work,
+    });
+  };
+  GEN.mixedgdp = (o, r) => {
+    const val = o.c + o.i + o.g + o.x - o.m;
+    const incSum = o.inc.reduce((s, j) => s + j[1], 0);
+    const rows = spendRows(o, r).concat(o.inc);
+    const work = `${fmt.num(o.c)} + ${fmt.num(o.i)} + ${fmt.num(o.g)} + ${xnWork(o)} = ${fmt.num(val)}`;
+    return numTask({
+      r, desk: 'gdp', lvl: o.lvl, order: 'GDP BY SPENDING?', ask: 'Use the expenditure approach. In billions of dollars.', fmt: fmt.bil, table: tableOf(rows, r),
+      value: val, calcF: 'gdp', calcIn: { c: o.c, i: o.i, g: o.g, x: o.x, m: o.m }, formula: F.gdp,
+      wrongs: [{ v: val + incSum, why: 'Spending and income measure the same GDP. Never add both.' }, { v: incSum, why: 'That adds income rows, and some are missing. Use spending.' }, { v: flipVal(o), why: flipWhy(o) }, { v: o.c + o.i + o.g, why: 'That leaves out net exports.' }],
+      work, why: 'Spending rows only: ' + work,
+    });
+  };
+  GEN.mixedinc = (o, r) => {
+    const val = o.w + o.re + o.n + o.p;
+    const spendSum = o.spend.reduce((s, j) => s + j[1], 0);
+    const rows = [['Wages', o.w], ['Rent', o.re], ['Interest', o.n], ['Profit', o.p]].concat(o.spend);
+    const work = `${fmt.num(o.w)} + ${fmt.num(o.re)} + ${fmt.num(o.n)} + ${fmt.num(o.p)} = ${fmt.num(val)}`;
+    return numTask({
+      r, desk: 'gdp', lvl: o.lvl, order: 'GDP BY INCOME?', ask: 'Use the income approach. In billions of dollars.', fmt: fmt.bil, table: tableOf(rows, r),
+      value: val, calcF: 'income', calcIn: { w: o.w, r: o.re, n: o.n, p: o.p }, formula: F.income,
+      wrongs: [{ v: val + spendSum, why: 'Income and spending measure the same GDP. Never add both.' }, { v: spendSum, why: 'That adds spending rows, and some are missing. Use income.' }, { v: val - o.re, why: 'That leaves out rent.' }, { v: o.w + o.p, why: 'That leaves out rent and interest.' }],
+      work, why: 'Income rows only: ' + work,
+    });
+  };
+  const popTable = (o) => {
+    const [tl, al] = ADULT_LABELS[o.al];
+    return [[tl, fmt.num(o.t)], [al, fmt.num(o.a)], ['Unemployed', fmt.num(o.u)], ['Employed', fmt.num(o.e)]];
+  };
+  GEN.popurate = (o, r) => {
+    const lf = o.u + o.e;
+    return numTask({
+      r, desk: 'jobs', lvl: o.lvl, order: 'UNEMPLOYMENT RATE?', ask: 'Some rows do not belong in the math.', table: popTable(o),
+      value: o.u / lf * 100, calcF: 'urate', calcIn: { u: o.u, lf }, formula: F.urate,
+      wrongs: [{ v: o.u / o.a * 100, why: 'That divides by working-age people. Use the labor force.' }, { v: o.u / o.t * 100, why: 'That divides by everyone, even children.' }, { v: o.u / o.e * 100, why: 'That divides by the employed only.' }],
+      work: `Labor force = ${fmt.num(o.u)} + ${fmt.num(o.e)} = ${fmt.num(lf)}. ${fmt.num(o.u)} ÷ ${fmt.num(lf)} × 100 = ${fmt.pct(o.u / lf * 100)}`,
+    });
+  };
+  GEN.poplfpr = (o, r) => {
+    const lf = o.u + o.e;
+    return numTask({
+      r, desk: 'jobs', lvl: o.lvl, order: 'LFPR?', ask: 'Labor force participation rate', table: popTable(o),
+      value: lf / o.a * 100, calcF: 'lfpr', calcIn: { lf, adults: o.a }, formula: F.lfpr,
+      wrongs: [{ v: lf / o.t * 100, why: 'That divides by everyone. Children are not adults.' }, { v: o.e / o.a * 100, why: 'The unemployed are in the labor force too.' }, { v: o.u / lf * 100, why: 'That is the unemployment rate.' }],
+      work: `${fmt.num(lf)} ÷ ${fmt.num(o.a)} × 100 = ${fmt.pct(lf / o.a * 100)}`,
+    });
+  };
+  GEN.lfurate = (o, r) => {
+    const u = o.lf - o.e;
+    return numTask({
+      r, desk: 'jobs', lvl: o.lvl, order: 'UNEMPLOYMENT RATE?', ask: 'There is no unemployed row. Find it first.', table: [['Population', fmt.num(o.p)], ['Labor force', fmt.num(o.lf)], ['Employed', fmt.num(o.e)]],
+      value: u / o.lf * 100, calcF: 'urate', calcIn: { u, lf: o.lf }, formula: F.urate,
+      wrongs: [{ v: u / o.p * 100, why: 'That divides by the population. Use the labor force.' }, { v: o.e / o.lf * 100, why: 'That is the share of the labor force with jobs.' }, { v: (o.p - o.e) / o.p * 100, why: 'People not looking for work are not unemployed.' }],
+      work: `Unemployed = ${fmt.num(o.lf)} ${MINUS} ${fmt.num(o.e)} = ${fmt.num(u)}. ${fmt.num(u)} ÷ ${fmt.num(o.lf)} × 100 = ${fmt.pct(u / o.lf * 100)}`,
+    });
+  };
+  const mil = (tenths) => `${comma(tenths / 10)} million`;
+  const gapCall = (o) => {
+    const urate = Math.round((o.lf - o.e) / o.lf * 1000) / 10;
+    return { urate, key: urate > o.nat ? 'recgap' : urate < o.nat ? 'infgap' : 'fullemp' };
+  };
+
+  kind('m-gdp', 'gdp', 'pick', MESSY_GDP, (o, r) => GEN.messygdp(o, r), { drill: true });
+  kind('m-mixed', 'gdp', 'pick', MIXED_GDP, (o, r) => GEN.mixedgdp(o, r), { drill: true });
+  kind('m-income', 'gdp', 'pick', MIXED_INC, (o, r) => GEN.mixedinc(o, r), { drill: true });
+  kind('m-urate', 'jobs', 'pick', POP_JOBS, (o, r) => GEN.popurate(o, r), { drill: true });
+  kind('m-lfpr', 'jobs', 'pick', POP_JOBS, (o, r) => GEN.poplfpr(o, r), { drill: true });
+  kind('m-lfu', 'jobs', 'pick', POP_LF, (o, r) => GEN.lfurate(o, r), { drill: true });
+  kind('m-gapcall', 'cycle', 'sort', GAP_CALLS, (o) => {
+    const { urate, key } = gapCall(o);
+    const u = o.lf - o.e;
+    const where = key === 'recgap' ? `Above the ${fmt.pct(o.nat)} natural rate, so real GDP is below potential.` : key === 'infgap' ? `Below the ${fmt.pct(o.nat)} natural rate, so real GDP is above potential.` : 'Equal to the natural rate, so real GDP is at potential.';
+    const base = { desk: 'cycle', lvl: o.lvl, order: 'WHICH GAP?', ask: 'Where is this economy?', options: bins('recgap', 'infgap', 'fullemp'), key, why: `${mil(u)} ÷ ${mil(o.lf)} = ${fmt.pct(urate)} unemployed. ${where}` };
+    return o.table
+      ? sortTask(Object.assign(base, { table: [['Labor force', mil(o.lf)], ['Employed', mil(o.e)], ['Natural rate of unemployment', fmt.pct(o.nat)]] }))
+      : sortTask(Object.assign(base, { text: `The labor force is ${mil(o.lf)}, and ${mil(o.e)} people have jobs. The natural rate of unemployment is ${fmt.pct(o.nat)}.` }));
+  }, { drill: true });
+  kind('m-gapword', 'cycle', 'sort', GAP_WORDS, (o) => sortTask({ desk: 'cycle', lvl: o.lvl, order: 'WHICH GAP?', ask: 'Name it the AP way.', text: o.t, options: bins('recgap', 'infgap', 'fullemp'), key: o.key, why: o.y }), { drill: true });
+  kind('m-stock', 'gdp', 'stamp', STOCKS, (o) => stampTask({ desk: 'gdp', lvl: o.lvl, order: 'DOES GDP GO UP?', ask: "This year's U.S. GDP", text: o.t, options: [{ key: 'in', label: 'GDP goes up', stampClass: 'go' }, { key: 'out', label: 'No change', stampClass: 'no' }], key: o.key, why: o.y }), { drill: true });
+
   /* grab tasks: tap the three that fit, chosen from the same records */
   const GRABS = [
     { k: 'g-invest', desk: 'gdp', lvl: 2, order: 'TAP THE 3 INVESTMENTS', pool: GDP, yes: (g) => g.line === 'I', no: (g) => g.line !== 'I' && g.lvl <= 2, y: 'I means new machines, buildings, homes, and inventories.', tag: (g) => (g.line ? g.line : 'Not counted') },
@@ -2750,6 +2955,7 @@ body.answered .keypad { display: none; }
     function kindScore(c) {
       let s = Math.pow(0.45, deskCount[deskOf(c.k, c.open)] || 0);
       if (c.k.desk === 'micro') s *= 0.35;
+      if (c.k.drill) s *= 2; // test-style tables: worth more practice than one kind among many
       return s * (0.35 + r());
     }
     function next(rank) {
@@ -2846,7 +3052,7 @@ body.answered .keypad { display: none; }
     K.forEach((k) => k.records.forEach((rec, i) => {
       const id = `${k.id}:${(rec && rec.k) || i}`;
       if (!seen.has(id)) {
-        const d = deskOf(k, [rec]);
+        const d = deskKey === DRILL.key ? (k.drill ? DRILL.key : null) : deskOf(k, [rec]);
         if (d === deskKey) pool.push({ k, rec, i, id });
       }
     }));
@@ -2866,7 +3072,7 @@ body.answered .keypad { display: none; }
     return buildFrom(k, rec, r, k.records.indexOf(rec));
   }
   const api = {
-    DESKS, VERBS, RANKS, BIN, ARROWS, KINDS: K, MINUS,
+    DESKS, DRILL, VERBS, RANKS, BIN, ARROWS, KINDS: K, MINUS,
     rng, shuffle, pickOne, fmt, wave, everyTask, boss, scheduler, payFor, streakMult, realPayOf, realPayQuestion, trainingTask, totalTasks, oneTask,
     _kit: { kind, finish, GEN, BUILD, SETS, bins, plain, VERB_CLOCK, VERB_PAY, VERB_WEIGHT, GDP, PEOPLE, EFFECTS, LOOP, REALNOM, COSTS, PHASES, NAMEIT, MICRO_ELASTIC, TYPES, MOVES, TOWNS, BOTHMOVES, PHIS, words },
   };
@@ -5663,7 +5869,8 @@ body.answered .keypad { display: none; }
   /* ================= training room ================= */
   function trainMenu() {
     S.mode = 'train';
-    const buttons = Object.keys(DESKS).map((d, i) => `<button type="button" class="deskbtn" data-act="train-go" data-desk="${d}" data-key="${i + 1}" style="--d:var(--w-${d})"><b>${esc(DESKS[d].code)}</b><span>${esc(DESKS[d].long)}</span></button>`).join('');
+    const buttons = Object.keys(DESKS).map((d, i) => `<button type="button" class="deskbtn" data-act="train-go" data-desk="${d}" data-key="${i + 1}" style="--d:var(--w-${d})"><b>${esc(DESKS[d].code)}</b><span>${esc(DESKS[d].long)}</span></button>`).join('')
+      + `<button type="button" class="deskbtn" data-act="train-go" data-desk="${B.DRILL.key}" data-key="${Object.keys(DESKS).length + 1}" style="--d:var(--w-boss)"><b>${esc(B.DRILL.code)}</b><span>${esc(B.DRILL.long)}</span></button>`;
     setScreen('trainmenu', 'home', `<section class="sheet">
       <h1 class="big">Practice a topic</h1>
       <p>No clock and no pink slips. After each task you see why. Anything you miss comes back.</p>
@@ -5692,7 +5899,7 @@ body.answered .keypad { display: none; }
   }
   function trainStop() {
     const tr = S.train;
-    setScreen('trainend', 'home', `<section class="sheet"><h1 class="big">${esc(DESKS[tr.desk].long)}</h1><p class="bigline">${tr.right} of ${tr.total} right</p><p>Ready? Clock in and try to beat your best real pay.</p><div class="report-actions"><button type="button" class="btn ghost" data-act="train-menu">Practice another topic</button></div></section>`, { line: 'Go back to the start.', main: 'Home', act: 'home' });
+    setScreen('trainend', 'home', `<section class="sheet"><h1 class="big">${esc((DESKS[tr.desk] || B.DRILL).long)}</h1><p class="bigline">${tr.right} of ${tr.total} right</p><p>Ready? Clock in and try to beat your best real pay.</p><div class="report-actions"><button type="button" class="btn ghost" data-act="train-menu">Practice another topic</button></div></section>`, { line: 'Go back to the start.', main: 'Home', act: 'home' });
   }
 
   /* ================= the Five Towns Cup (class mode) ================= */

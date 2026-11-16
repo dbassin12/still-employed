@@ -1241,7 +1241,8 @@
   /* ================= training room ================= */
   function trainMenu() {
     S.mode = 'train';
-    const buttons = Object.keys(DESKS).map((d, i) => `<button type="button" class="deskbtn" data-act="train-go" data-desk="${d}" data-key="${i + 1}" style="--d:var(--w-${d})"><b>${esc(DESKS[d].code)}</b><span>${esc(DESKS[d].long)}</span></button>`).join('');
+    const buttons = Object.keys(DESKS).map((d, i) => `<button type="button" class="deskbtn" data-act="train-go" data-desk="${d}" data-key="${i + 1}" style="--d:var(--w-${d})"><b>${esc(DESKS[d].code)}</b><span>${esc(DESKS[d].long)}</span></button>`).join('')
+      + `<button type="button" class="deskbtn" data-act="train-go" data-desk="${B.DRILL.key}" data-key="${Object.keys(DESKS).length + 1}" style="--d:var(--w-boss)"><b>${esc(B.DRILL.code)}</b><span>${esc(B.DRILL.long)}</span></button>`;
     setScreen('trainmenu', 'home', `<section class="sheet">
       <h1 class="big">Practice a topic</h1>
       <p>No clock and no pink slips. After each task you see why. Anything you miss comes back.</p>
@@ -1270,7 +1271,7 @@
   }
   function trainStop() {
     const tr = S.train;
-    setScreen('trainend', 'home', `<section class="sheet"><h1 class="big">${esc(DESKS[tr.desk].long)}</h1><p class="bigline">${tr.right} of ${tr.total} right</p><p>Ready? Clock in and try to beat your best real pay.</p><div class="report-actions"><button type="button" class="btn ghost" data-act="train-menu">Practice another topic</button></div></section>`, { line: 'Go back to the start.', main: 'Home', act: 'home' });
+    setScreen('trainend', 'home', `<section class="sheet"><h1 class="big">${esc((DESKS[tr.desk] || B.DRILL).long)}</h1><p class="bigline">${tr.right} of ${tr.total} right</p><p>Ready? Clock in and try to beat your best real pay.</p><div class="report-actions"><button type="button" class="btn ghost" data-act="train-menu">Practice another topic</button></div></section>`, { line: 'Go back to the start.', main: 'Home', act: 'home' });
   }
 
   /* ================= the Five Towns Cup (class mode) ================= */
