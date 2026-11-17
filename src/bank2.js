@@ -42,8 +42,8 @@
 
   /* ================= fill the blank ================= */
   const BLANKS = MORE.BLANK.map(([d, lvl, t, a, w1, w2, w3, y]) => ({ d, lvl, t, a, w: [w1, w2, w3], y }));
-  eachDesk(BLANKS, 'blank', 'blank', (x, r) => {
-    const options = shuffle(r, [x.a].concat(x.w)).map((label) => ({ label }));
+  eachDesk(BLANKS, 'blank', 'blank', (x) => {
+    const options = B.steady([x.a].concat(x.w)).map((label) => ({ label }));
     return finish({ desk: x.d, verb: 'blank', lvl: x.lvl, order: 'FILL THE BLANK', text: x.t, options, answer: options.findIndex((o) => o.label === x.a), why: x.y });
   });
 
@@ -72,15 +72,18 @@
   });
 
   /* ================= AP style ================= */
-  eachDesk(MORE.AP, 'ap', 'ap', (x, r) => {
-    const options = shuffle(r, [x.a].concat(x.w)).map((label) => ({ label }));
-    return fin({ desk: x.d, verb: 'ap', lvl: x.lvl, order: 'AP STYLE QUESTION', text: x.q, options, answer: options.findIndex((o) => o.label === x.a), why: x.y }, options.map((o) => o.label));
+  /* Choices that are all numbers read low to high, the way the AP exam prints them. Word choices are shuffled. */
+  const apNumber = (l) => { const m = /^\$?([0-9][0-9,]*\.?[0-9]*)%?( billion)?$/.exec(l); return m ? Number(m[1].replace(/,/g, '')) : null; };
+  const apOrder = (r, labels) => (labels.every((l) => apNumber(l) !== null) ? labels.slice().sort((a, b) => apNumber(a) - apNumber(b)) : shuffle(r, labels));
+  eachDesk(MORE.AP.concat(MORE.AP2 || []), 'ap', 'ap', (x, r) => {
+    const options = apOrder(r, [x.a].concat(x.w)).map((label) => ({ label }));
+    return fin({ desk: x.d, verb: 'ap', lvl: x.lvl, order: 'AP STYLE QUESTION', text: x.q, options, answer: options.findIndex((o) => o.label === x.a), why: x.y, f: x.f }, options.map((o) => o.label));
   });
 
   /* ================= finish the sentence ================= */
   eachDesk(MORE.FRQ, 'frq', 'frq', (x, r) => {
     const blanks = x.b.map((list) => {
-      const options = shuffle(r, list);
+      const options = B.steady(list);
       return { options, answer: options.indexOf(list[0]) };
     });
     return fin({ desk: x.d, verb: 'frq', lvl: x.lvl, order: 'FINISH THE SENTENCE', text: x.t, blanks, why: x.y }, [x.b[0].join(' '), x.b[1].join(' ')]);
@@ -603,6 +606,214 @@
     options: x.L.vals.map((v, i) => ({ label: 'Year ' + (i + 1) })), answer: x.ans, why: x.a.y(x.L.vals, x.ans),
   }, x.a.k === 'level' ? 8 : 1));
   B.GRAPHS = { PPC_LAYOUTS, PPC_ASKS, PPC_MOVES, SD_EQ, SD_CONTROLS, SD_SHIFTS, INFL_LINES };
+
+  /* ================= AP style, with numbers (Nov 17, 2026) =================
+     Five-choice number questions in AP wording, several number sets each, so the AP style topic does not repeat itself.
+     v is the key. Each wrong choice is a named mistake a student really makes. Choices read low to high.
+     bank.test.js works every key out again with its own formulas. */
+  const one = (v) => Math.round(v * 10) / 10;
+  const pct1 = (v) => `${v < 0 ? B.MINUS : ''}${String(one(Math.abs(v)))}%`;
+  const bil = (v) => `$${fmt.num(Math.round(v))} billion`;
+  const dol = (v) => fmt.usd(Math.round(v));
+  const dol2 = (v) => `$${(Math.round(v * 100) / 100).toFixed(2)}`;
+  const idx = (v) => String(one(v));
+  const APN = [
+    { k: 'urate', d: 'jobs', lvl: 2, f: 'urate', show: pct1,
+      sets: [[1840, 160, 500], [930, 70, 250], [2760, 240, 1000], [475, 25, 300], [1410, 90, 500], [3680, 320, 1000]],
+      q: ([e, u, n]) => `A country has ${fmt.num(e)} employed workers, ${fmt.num(u)} unemployed workers, and ${fmt.num(n)} adults who are not in the labor force. What is the unemployment rate?`,
+      v: ([e, u]) => u / (e + u) * 100,
+      w: [([e, u, n]) => u / (e + u + n) * 100, ([e, u]) => u / e * 100, ([e, u, n]) => (u + n) / (e + u + n) * 100, ([e, u]) => e / (e + u) * 100],
+      y: ([e, u]) => `${fmt.num(u)} ÷ ${fmt.num(e + u)} × 100. The labor force is the employed plus the unemployed.` },
+    { k: 'lfpr', d: 'jobs', lvl: 2, f: 'lfpr', show: pct1,
+      sets: [[1840, 160, 500], [930, 70, 250], [2760, 240, 1000], [475, 25, 300], [1410, 90, 500], [3680, 320, 1000]],
+      q: ([e, u, n]) => `A town has ${fmt.num(e)} people with jobs, ${fmt.num(u)} people looking for work, and ${fmt.num(n)} adults who are not looking. What is the labor force participation rate?`,
+      v: ([e, u, n]) => (e + u) / (e + u + n) * 100,
+      w: [([e, u, n]) => e / (e + u + n) * 100, ([e, u]) => u / (e + u) * 100, ([e, u, n]) => n / (e + u + n) * 100, ([e, u]) => e / (e + u) * 100],
+      y: ([e, u, n]) => `${fmt.num(e + u)} ÷ ${fmt.num(e + u + n)} × 100. Divide the labor force by all adults.` },
+    { k: 'gdp', d: 'gdp', lvl: 2, f: 'gdp', show: bil,
+      sets: [[640, 130, 210, 90, 120], [420, 90, 160, 75, 45], [910, 200, 330, 150, 190], [550, 140, 180, 60, 110], [720, 160, 240, 130, 100]],
+      q: ([c, i, g, x, m]) => `In billions of dollars, consumption is ${c}, investment is ${i}, government purchases are ${g}, exports are ${x}, and imports are ${m}. What is GDP?`,
+      v: ([c, i, g, x, m]) => c + i + g + x - m,
+      w: [([c, i, g, x, m]) => c + i + g + x + m, ([c, i, g]) => c + i + g, ([c, i, g, x]) => c + i + g + x, ([c, i, g, x, m]) => c + i + g + m - x],
+      y: ([c, i, g, x, m]) => `${c} + ${i} + ${g} + (${x} ${B.MINUS} ${m}).` },
+    { k: 'cpi', d: 'prices', lvl: 2, f: 'cpi', show: idx,
+      sets: [[80, 92], [250, 270], [60, 75], [400, 460], [150, 168], [320, 352]],
+      q: ([b, n]) => `A basket of goods cost $${b} in the base year. The same basket costs $${n} this year. What is the price index this year?`,
+      v: ([b, n]) => n / b * 100,
+      w: [([b, n]) => b / n * 100, ([b, n]) => (n - b) / b * 100, ([b, n]) => 100 + (n - b), ([b, n]) => 100 + (n - b) / n * 100],
+      y: ([b, n]) => `${n} ÷ ${b} × 100.` },
+    { k: 'infl', d: 'prices', lvl: 2, f: 'infl', show: pct1,
+      sets: [[140, 147], [220, 231], [125, 135], [160, 164], [250, 265], [180, 171]],
+      q: ([a, b]) => `The consumer price index goes from ${a} to ${b} in one year. What is the inflation rate for that year?`,
+      v: ([a, b]) => (b - a) / a * 100,
+      w: [([a, b]) => (b - a) / b * 100, ([a, b]) => b - a, ([a, b]) => b / a * 100, ([a, b]) => a / b * 100],
+      y: ([a, b]) => `(${b} ${B.MINUS} ${a}) ÷ ${a} × 100. Divide by the old index.` },
+    { k: 'realgdp', d: 'real', lvl: 2, f: 'realgdp', show: bil,
+      sets: [[1380, 115], [2400, 120], [1650, 110], [1890, 105], [1560, 130], [840, 112]],
+      q: ([n, d]) => `A country has a nominal GDP of $${fmt.num(n)} billion. With a GDP deflator of ${d}, what is its real GDP?`,
+      v: ([n, d]) => n / d * 100,
+      w: [([n, d]) => n * d / 100, ([n, d]) => n - d, ([n, d]) => n / d, ([n, d]) => n * (200 - d) / 100],
+      y: ([n, d]) => `${fmt.num(n)} ÷ ${d} × 100.` },
+    { k: 'deflator', d: 'real', lvl: 2, f: 'deflator', show: idx,
+      sets: [[1320, 1200], [2100, 1750], [1890, 1800], [1610, 1400], [2760, 2400], [1375, 1250]],
+      q: ([n, re]) => `Nominal GDP is $${fmt.num(n)} billion and real GDP is $${fmt.num(re)} billion. What is the GDP deflator?`,
+      v: ([n, re]) => n / re * 100,
+      w: [([n, re]) => re / n * 100, ([n, re]) => n - re, ([n, re]) => (n - re) / re * 100, ([n, re]) => 100 + (n - re) / n * 100],
+      y: ([n, re]) => `${fmt.num(n)} ÷ ${fmt.num(re)} × 100.` },
+    { k: 'realrate', d: 'costs', lvl: 2, f: 'realrate', show: pct1,
+      sets: [[9, 4], [6, 2], [5, 7], [11, 3], [4, 6], [10, 6]],
+      q: ([i, p]) => `A bank charges a nominal interest rate of ${i} percent on a loan. Inflation over the year is ${p} percent. What is the real interest rate?`,
+      v: ([i, p]) => i - p,
+      w: [([i, p]) => i + p, ([i, p]) => p - i, ([i]) => i, ([i, p]) => i * p],
+      y: ([i, p]) => `${i} ${B.MINUS} ${p}.` },
+    { k: 'percap', d: 'miss', lvl: 2, f: 'percap', show: dol,
+      sets: [[840, 28], [1250, 50], [360, 12], [990, 45], [1560, 60], [480, 32]],
+      q: ([g, p]) => `A country has a GDP of $${fmt.num(g)} billion and a population of ${p} million. What is its GDP per capita?`,
+      v: ([g, p]) => g * 1000 / p,
+      w: [([g, p]) => g / p, ([g, p]) => g * 100 / p, ([g, p]) => g * 10000 / p, ([g, p]) => g * p],
+      y: ([g, p]) => `${fmt.num(g)} billion ÷ ${p} million.` },
+    { k: 'gap', d: 'cycle', lvl: 2, f: 'gap', show: pct1,
+      sets: [[1900, 2000], [1260, 1200], [2850, 3000], [1560, 1500], [2300, 2500], [1785, 1700]],
+      q: ([a, p]) => `Actual real GDP is $${fmt.num(a)} billion and potential real GDP is $${fmt.num(p)} billion. What is the output gap as a percent of potential real GDP?`,
+      v: ([a, p]) => (a - p) / p * 100,
+      w: [([a, p]) => (p - a) / p * 100, ([a, p]) => (a - p) / a * 100, ([a, p]) => a / p * 100, ([a, p]) => (p - a) / a * 100],
+      y: ([a, p]) => `(${fmt.num(a)} ${B.MINUS} ${fmt.num(p)}) ÷ ${fmt.num(p)} × 100.` },
+    { k: 'cyclical', d: 'cycle', lvl: 2, f: 'cyclical', show: pct1,
+      sets: [[7.5, 5], [4, 5.5], [9, 5], [3.5, 4.5], [6.5, 4]],
+      q: ([u, n]) => `The unemployment rate is ${u} percent. The natural rate of unemployment is ${n} percent. What is cyclical unemployment?`,
+      v: ([u, n]) => u - n,
+      w: [([u, n]) => n - u, ([u, n]) => u + n, ([u]) => u, ([u, n]) => n],
+      y: ([u, n]) => `${u} ${B.MINUS} ${n}. Cyclical is the part above or below the natural rate.` },
+    { k: 'realwage', d: 'prices', lvl: 2, f: 'realwage', show: dol2,
+      sets: [[26, 130], [21, 105], [36, 120], [33, 110], [45, 125]],
+      q: ([w, c]) => `A worker earns $${w} an hour. The CPI is ${c}, and it was 100 in the base year. What is the real wage in base-year dollars?`,
+      v: ([w, c]) => w / c * 100,
+      w: [([w, c]) => w * c / 100, ([w, c]) => w * (200 - c) / 100, ([w]) => w, ([w, c]) => w * (c - 100) / 100],
+      y: ([w, c]) => `${w} ÷ ${c} × 100.` },
+  ];
+  APN.forEach((tp) => {
+    kind('apn-' + tp.k, tp.d, 'ap', tp.sets.map((set, i) => ({ k: 's' + i, lvl: tp.lvl, set })), (rec) => {
+      const value = tp.v(rec.set);
+      const list = [{ v: value, right: true }].concat(tp.w.map((f) => ({ v: f(rec.set) })));
+      const options = list.slice().sort((a, b) => a.v - b.v).map((o) => ({ label: tp.show(o.v), v: o.v, right: !!o.right }));
+      return fin({ desk: tp.d, verb: 'ap', lvl: tp.lvl, order: 'AP STYLE QUESTION', text: tp.q(rec.set), options, answer: options.findIndex((o) => o.right), why: tp.y(rec.set), f: tp.f, apn: { k: tp.k, set: rec.set } }, options.map((o) => o.label));
+    });
+  });
+
+  /* ================= the formula or rule shown with every answer =================
+     The teacher asked for "formulas to every answer so kids can learn" (Nov 17, 2026). Every task gets t.learn:
+     { label: 'Formula' or 'Rule', text }. A math task keeps the formula it already had. Every other task gets the
+     formula its topic rests on, or, where the idea has no formula (what GDP misses, the phases of the cycle), the
+     one-line rule. A kind listed in LEARN_KIND always uses that line. The catch-all kinds (true or false, AP style,
+     fill the blank, and so on) pick a line by the words in the task, then fall back to the line for their desk. */
+  const F = B.F, MN = B.MINUS;
+  const LEARN = {
+    gdp: F.gdp,
+    counts: 'GDP = the market value of new, final goods and services made here this year',
+    loop: 'Leaves the loop: savings, taxes, imports. Comes in: investment, government purchases, exports.',
+    flow: 'Households sell factors and buy goods. Firms buy factors and sell goods. Money flows the other way.',
+    income: F.income,
+    approach: 'GDP = C + I + G + Xn = wages + rent + interest + profit = total value added',
+    va: `Value added = sale price ${MN} cost of inputs. Add every stage and you get the final sale.`,
+    percap: F.percap,
+    percapgrow: `Growth in GDP per capita ≈ GDP growth ${MN} population growth`,
+    misses: 'GDP misses unpaid work, hidden sales, leisure, quality, pollution, and how income is divided.',
+    lf: 'Labor force = employed + unemployed. No job and not looking means not in the labor force.',
+    urate: F.urate,
+    lfpr: F.lfpr,
+    natural: `Natural rate = frictional + structural. Cyclical = actual ${MN} natural.`,
+    cyclical: `Cyclical unemployment = actual rate ${MN} natural rate`,
+    cpi: F.cpi,
+    infl: F.infl,
+    naming: `Inflation rate = (new ${MN} old) \u00f7 old \u00d7 100. Falling but above 0: disinflation. Below 0: deflation.`,
+    realwage: F.realwage,
+    wagechange: `Change in real wage ≈ raise % ${MN} inflation %`,
+    basket: 'Cost of the basket = price × quantity, added up for every item',
+    bias: 'A fixed basket misses switching, new goods, and better quality, so the CPI overstates inflation.',
+    convert: F.convert,
+    realrate: F.realrate,
+    surprise: `Real rate = nominal rate ${MN} inflation. Surprise inflation lowers it, so fixed-rate borrowers gain.`,
+    realvalue: 'Real value = nominal value ÷ price index × 100. Fixed dollars buy less when prices rise.',
+    menushoe: 'Menu costs: the cost of changing prices. Shoe-leather costs: the cost of holding less cash.',
+    realgdp: F.realgdp,
+    deflator: F.deflator,
+    nomreal: "Nominal GDP = this year's prices \u00d7 output. Real GDP = base-year prices \u00d7 output.",
+    nomgrow: 'Nominal growth ≈ real growth + inflation',
+    baseyear: 'In the base year the index is 100, so real GDP = nominal GDP.',
+    growth: F.growth,
+    gap: `Output gap = actual real GDP ${MN} potential real GDP`,
+    gapsign: `Output gap = actual ${MN} potential. A negative gap means unemployment is above the natural rate.`,
+    phases: 'Expansion: real GDP rises. Contraction: it falls. The peak and trough are the turning points.',
+    ppc: 'On the PPC, actual real GDP = potential real GDP. Inside the curve the output gap is negative.',
+    shortage: `Shortage = quantity demanded ${MN} quantity supplied. A surplus is the reverse.`,
+    csurplus: `Consumer surplus = the most you would pay ${MN} the price you pay`,
+    elastic: 'Elasticity of demand = % change in quantity ÷ % change in price. Above 1 is elastic.',
+    taxburden: 'The less elastic side of the market pays more of a tax.',
+    tariff: 'A tariff is a tax on imports. The price at home rises and imports fall.',
+    shifts: 'Demand shifts right: price and quantity rise. Supply shifts right: price falls and quantity rises.',
+    dwl: 'A tax raises the price buyers pay, lowers the price sellers keep, and cuts the quantity sold.',
+    potential: 'Potential real GDP grows with more workers, more capital, and better technology.',
+    gapdollar: `Output gap = actual real GDP ${MN} potential real GDP`,
+    nominal: F.nominal || 'Nominal GDP = real GDP \u00d7 deflator \u00f7 100',
+  };
+  const LEARN_KIND = {
+    counted: 'counts', whynot: 'counts', 'pile-counted': 'counts', 'm-stock': 'gdp', line: 'gdp', grab: 'gdp', 'match-gdp': 'gdp', 'odd-gdp': 'gdp',
+    flow: 'flow', 'label-flow': 'flow', loop: 'loop', 'pile-loop': 'loop', income: 'income', approach: 'approach',
+    'c-final': 'va', 'c-va': 'va', 'type-va': 'va', 'order-gdp': 'va',
+    miss: 'misses', 'match-miss': 'misses', percapmove: 'percapgrow', 'arrows-miss': 'percapgrow', 'cmp-percap': 'percap', 'rank-percap': 'percap', 'order-miss': 'percap',
+    who: 'lf', 'pile-labor': 'lf', town: 'lf', 'arrows-move': 'lf', 'odd-jobs': 'lf', 'match-jobs': 'lf',
+    type: 'natural', 'pile-types': 'natural', natural: 'natural', 'arrows-jobs': 'natural',
+    'cmp-urate': 'urate', 'rank-urate': 'urate', 'rows-highu': 'urate', 'bad-urate': 'urate', 'order-jobs': 'urate', 'cmp-lfpr': 'lfpr', 'bad-lfpr': 'lfpr',
+    nameit: 'naming', 'pile-nameit': 'naming', 'odd-prices': 'naming', 'rows-deflation': 'naming', 'rows-disinflation': 'naming', 'bars-deflation': 'naming', 'bars-disinflation': 'naming', 'infl-line': 'naming',
+    bias: 'bias', 'c-basket': 'basket', 'type-basket': 'basket', 'c-wagechange': 'wagechange', 'type-wagechange': 'wagechange',
+    'cmp-wage': 'realwage', 'rank-wage': 'realwage', 'bad-wage': 'realwage', 'cmp-infl': 'infl', 'rank-infl': 'infl', 'rows-highinfl': 'infl', 'bad-infl': 'infl', 'arrows-prices': 'infl',
+    'cmp-index': 'cpi', 'bars-base': 'cpi', 'bad-cpi': 'cpi', 'order-prices': 'cpi',
+    loan: 'surprise', 'cmp-rate': 'realrate', 'order-costs': 'surprise', 'arrows-costs': 'surprise', menu: 'menushoe', 'pile-costs': 'menushoe',
+    realnom: 'nomreal', 'pile-realnom': 'nomreal', 'odd-real': 'nomreal', 'match-real': 'nomreal', both: 'nomgrow', 'arrows-both': 'nomgrow', whichline: 'nomgrow',
+    'c-onegood': 'nomreal', 'type-onegood': 'nomreal', basechart: 'baseyear', 'rows-baseyear': 'baseyear', 'rows-equal': 'baseyear',
+    'rows-realfell': 'realgdp', 'cmp-real': 'realgdp', 'rank-real': 'realgdp', 'bad-real': 'realgdp', 'bad-def': 'deflator', 'order-real': 'growth',
+    cycletap: 'phases', cycleread: 'phases', phase: 'phases', wave: 'phases', 'label-cycle': 'phases', 'order-cycle': 'phases', 'pile-phase': 'phases', 'odd-cycle': 'phases',
+    'bars-contraction': 'phases', 'rows-peak': 'phases', 'rows-trough': 'phases', 'arrows-cycle': 'phases',
+    sign: 'gapsign', 'm-gapcall': 'gapsign', 'm-gapword': 'gapsign', 'rows-negative': 'gapsign', 'rows-positive': 'gapsign', 'rows-atnatural': 'gapsign', 'bars-negative': 'gapsign', 'bars-positive': 'gapsign',
+    'cmp-gap': 'gap', 'cmp-cyc': 'cyclical', 'bad-cyc': 'cyclical', 'ppc-tap': 'ppc', 'ppc-move': 'ppc',
+    mkt: 'shortage', 'sd-control': 'shortage', 'order-micro': 'shortage', taxburden: 'taxburden', elastic: 'elastic', 'pile-elastic': 'elastic', 'odd-micro': 'elastic',
+    'c-surplus': 'csurplus', 'sd-shift': 'shifts',
+  };
+  /* For the catch-all kinds: the first pattern that matches the words in the task wins. The last entry is the desk's fallback. */
+  const LEARN_WORDS = {
+    gdp: [[/factor market|product market|flows? (from|to)|in exchange for|households sell|firms (buy|sell)|revenue for firms/i, 'flow'], [/leaves the circular flow|into the circular flow|\bloop\b|leak|inject/i, 'loop'], [/circular flow/i, 'flow'], [/value added|each stage|final sale/i, 'va'], [/income approach|wages, rent|\brent\b.*profit/i, 'income'], [/\b(C|I|G|Xn) (means|rises|falls)|investment|consumption|government purchases|net exports/, 'gdp'], [/used|intermediate|transfer|stock|bond|resale|final good|market value|made abroad|inside the borders|counted/i, 'counts'], [/./, 'gdp']],
+    miss: [[/population (rises|grows|grew)|grows faster than/i, 'percapgrow'], [/leisure|free time|traffic|hours a week|unpaid|nonmarket|underground|in cash|pollut|environment|forest|quality|divided|richest/i, 'misses'], [/per capita|per person|population/i, 'percap'], [/./, 'misses']],
+    jobs: [[/participation|LFPR/i, 'lfpr'], [/frictional|structural|natural rate|full employment/i, 'natural'], [/cyclical/i, 'cyclical'], [/unemployment rate/i, 'urate'], [/./, 'lf']],
+    prices: [[/real wage|buying power|buys (more|less)|purchasing/i, 'realwage'], [/disinflation|deflation|falls but stays|price level falls|still rose|more slowly/i, 'naming'], [/substitut|new goods|quality|overstate|fixed basket/i, 'bias'], [/basket|price index|base year|\bCPI is\b|index of/i, 'cpi'], [/./, 'infl']],
+    costs: [[/menu|shoe/i, 'menushoe'], [/real (interest )?rate|nominal (interest )?rate|interest rates?|real return/i, 'realrate'], [/loan|lend|borrow|mortgage|bank|bond|fixed-rate|fixed rate/i, 'surprise'], [/./, 'realvalue']],
+    real: [[/in the base year|base year.*(equal|100)/i, 'baseyear'], [/base-year prices|current prices/i, 'nomreal'], [/deflator/i, 'deflator'], [/grow|growth|rose|fell|rises|falls/i, 'nomgrow'], [/./, 'nomreal']],
+    cycle: [[/PPC|production possibilities/i, 'ppc'], [/cyclical unemployment/i, 'cyclical'], [/gap|potential|natural rate|full employment/i, 'gapsign'], [/./, 'phases']],
+    micro: [[/production possibilities|PPC/i, 'ppc'], [/consumer surplus|total surplus|would pay/i, 'csurplus'], [/tariff|quota|import/i, 'tariff'], [/deadweight|quantity sold/i, 'dwl'], [/tax/i, 'taxburden'], [/elastic|substitute|necessit|total revenue/i, 'elastic'], [/shifts? (right|left)|demand (rises|falls)|supply (rises|falls)/i, 'shifts'], [/./, 'shortage']],
+  };
+  const learnLine = (text) => ({ label: /[=≈]/.test(text) ? 'Formula' : 'Rule', text });
+  B.LEARN = LEARN;
+  B.SHEET = [
+    ['gdp', ['counts', 'gdp', 'income', 'va', 'loop', 'flow']],
+    ['miss', ['percap', 'percapgrow', 'misses']],
+    ['jobs', ['lf', 'urate', 'lfpr', 'natural', 'cyclical']],
+    ['prices', ['cpi', 'infl', 'naming', 'realwage', 'wagechange', 'convert', 'bias']],
+    ['costs', ['realrate', 'surprise', 'realvalue', 'menushoe']],
+    ['real', ['nomreal', 'realgdp', 'deflator', 'nomgrow', 'growth', 'baseyear']],
+    ['cycle', ['phases', 'gapdollar', 'gap', 'gapsign', 'potential', 'ppc']],
+    ['micro', ['shortage', 'csurplus', 'elastic', 'taxburden', 'dwl', 'tariff', 'shifts']],
+  ].map(([desk, keys]) => ({ desk, lines: keys.map((k) => learnLine(LEARN[k] || F[k])) }));
+  B.learnFor = (t) => {
+    if (!t || t.learn) return t;
+    if (t.formula) { t.learn = learnLine(t.formula); return t; }
+    let key = t.f || LEARN_KIND[t.kind];
+    if (!key) {
+      const hay = [t.order, t.ask, t.text, t.why].concat(t.lines || [], t.verb === 'ap' && t.options ? [t.options[t.answer].label] : []).filter(Boolean).join(' ');
+      const rules = LEARN_WORDS[t.desk] || [[/./, 'gdp']];
+      key = rules.find(([re]) => re.test(hay))[1];
+    }
+    t.learn = learnLine(LEARN[key] || F[key] || key);
+    return t;
+  };
 
   if (inNode) module.exports = B;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

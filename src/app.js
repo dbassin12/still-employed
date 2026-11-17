@@ -606,7 +606,7 @@
      While it is open, the keyboard types into it (digits, + - * / x, parentheses, Enter, Backspace, Escape),
      so 1 to 9 and A to E cannot pick an answer by accident. It closes on each new screen but keeps its last line. */
   const CALC_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2"/><path d="M8 6.5h8M8.5 11h1M12 11h0M15.5 11h0M8.5 14.5h0M12 14.5h0M15.5 14.5h0M8.5 18h0M12 18h0M15.5 18h0"/></svg>';
-  const calcBtn = () => `<button type="button" class="calcbtn" data-act="calc" aria-expanded="${Calc.open}" aria-controls="calc">${CALC_ICON}Calculator</button>`;
+  const calcBtn = () => `<button type="button" class="calcbtn" data-act="calc" aria-expanded="${Calc.open}" aria-controls="calc" aria-label="Calculator">${CALC_ICON}<span class="calc-word">Calculator</span></button>`;
   const Calc = { open: false, expr: '', prev: '', shown: '', done: false, err: false };
   const CALC_OPS = ['+', B.MINUS, '×', '÷'];
   function calcPretty(e) { return e.replace(/([+×÷])/g, ' $1 ').replace(/([0-9.)])−/g, '$1 − ').replace(/\s+/g, ' ').trim(); }
@@ -689,7 +689,7 @@
     if (o.strike) strikeOne(t);
     if (t.verb === 'label') lightSpot(t);
     if (o.clock) Clock.start(o.clock, () => answer(null)); else Clock.hide();
-    lock(200);
+    lock(450);
     Sound.undip();
     soundScene();
     paintAudio();
@@ -949,11 +949,19 @@
   }
 
   /* verdict: every answer waits for Next. The clock only runs during a task, so there is always time to read why. */
+  /* The formula, or the rule where there is no formula, shown with every answer so students learn it (asked for Nov 17, 2026).
+     Left off when the line above already says the same thing. */
+  const learnHTML = (t) => {
+    const l = t && t.learn;
+    const bare = (x) => String(x || '').replace(/\.$/, '');
+    if (!l || bare(t.why).includes(bare(l.text)) || bare(t.work).includes(bare(l.text))) return '';
+    return `<p class="v-learn"><b>${esc(l.label)}:</b> ${esc(l.text)}</p>`;
+  };
   function showVerdict(v) {
     const slot = $('#verdict-slot'); if (!slot) return;
     const t = Run.t;
     const face_ = face(v.right ? 'glad' : 'mad');
-    const showWork = t.work && t.work !== t.why && !(v.right && !['pick', 'build', 'town', 'type', 'dial', 'rows'].includes(t.verb));
+    const showWork = t.work && t.work !== t.why && !String(t.why || '').includes(t.work) && !(v.right && !['pick', 'build', 'town', 'type', 'dial', 'rows'].includes(t.verb));
     const work = showWork ? `<p class="v-work">${esc(t.work)}</p>` : '';
     const said = v.right ? '' : youSaid(t, Run.choice);
     const ans = v.right ? '' : `${said ? `<p class="v-you">You said: ${esc(said)}</p>` : ''}<p class="v-ans">The answer: <b>${esc(answerText(t))}</b></p>`;
@@ -963,7 +971,7 @@
     const nextBtn = `<button type="button" class="btn main v-next" data-act="next">${esc(v.next || 'Next')}</button>`;
     slot.innerHTML = `<aside class="verdict ${v.right ? 'right' : 'wrong'}">
       ${face_}
-      <div class="v-text"><p class="v-head"><b>${esc(v.head)}</b>${tag}</p>${ans}${pickedWhy}<p class="v-why">${esc(!v.right && Run.whyOverride ? Run.whyOverride : t.why)}</p>${work}${v.note ? `<p class="v-note">${esc(v.note)}</p>` : ''}</div>
+      <div class="v-text"><p class="v-head"><b>${esc(v.head)}</b>${tag}</p>${ans}${pickedWhy}<p class="v-why">${esc(!v.right && Run.whyOverride ? Run.whyOverride : t.why)}</p>${work}${learnHTML(t)}${v.note ? `<p class="v-note">${esc(v.note)}</p>` : ''}</div>
       ${nextBtn}
     </aside>`;
     Run.onNext = v.onNext;
@@ -1071,10 +1079,12 @@
       <div class="modes">
         <button type="button" class="mode" data-act="solo-start" id="go-solo"><b>Play on my own</b><span>Phone or laptop. About 15 minutes.</span></button>
         <button type="button" class="mode alt" data-act="cup-setup" id="go-class"><b>Play as a class</b><span>Project it. Town against town.</span></button>
+        <button type="button" class="mode alt wide" data-act="train-ap" id="go-ap"><b>AP style questions</b><span>Five choices, like the exam. No clock, every topic.</span></button>
       </div>
       ${best}
       <div class="home-tools">
         <button type="button" class="linkbtn" data-act="train-menu">Practice a topic, no clock</button>
+        <button type="button" class="linkbtn" data-act="formulas">Formula sheet</button>
         ${prefs.lastCard ? '<button type="button" class="linkbtn" data-act="last-card">See my last card</button>' : ''}
         <button type="button" class="linkbtn" data-act="toggle-extra" aria-pressed="${prefs.extra}">Extra time: ${prefs.extra ? 'on' : 'off'}</button>
         <button type="button" class="linkbtn" data-act="toggle-music"></button>
@@ -1417,12 +1427,20 @@
   function trainMenu() {
     S.mode = 'train';
     const buttons = Object.keys(DESKS).map((d, i) => `<button type="button" class="deskbtn" data-act="train-go" data-desk="${d}" data-key="${i + 1}" style="--d:var(--w-${d})"><b>${esc(DESKS[d].code)}</b><span>${esc(DESKS[d].long)}</span></button>`).join('')
-      + `<button type="button" class="deskbtn" data-act="train-go" data-desk="${B.DRILL.key}" data-key="${Object.keys(DESKS).length + 1}" style="--d:var(--w-boss)"><b>${esc(B.DRILL.code)}</b><span>${esc(B.DRILL.long)}</span></button>`;
+      + `<button type="button" class="deskbtn" data-act="train-go" data-desk="${B.DRILL.key}" data-key="${Object.keys(DESKS).length + 1}" style="--d:var(--w-boss)"><b>${esc(B.DRILL.code)}</b><span>${esc(B.DRILL.long)}</span></button>`
+      + `<button type="button" class="deskbtn apstyle" data-act="train-go" data-desk="${B.APSTYLE.key}" style="--d:var(--ink)"><b>${esc(B.APSTYLE.code)}</b><span>${esc(B.APSTYLE.long)}</span></button>`;
     setScreen('trainmenu', 'home', `<section class="sheet">
       <h1 class="big">Practice a topic</h1>
       <p>No clock and no pink slips. After each task you see why. Anything you miss comes back.</p>
       <div class="desks">${buttons}</div>
-    </section>`, { line: 'Tap a topic to start.', extra: '<button type="button" class="linkbtn tray-link" data-act="home">Back</button>' });
+    </section>`, { line: 'Tap a topic to start.', extra: '<button type="button" class="linkbtn tray-link" data-act="formulas">Formula sheet</button><button type="button" class="linkbtn tray-link" data-act="home">Back</button>' });
+  }
+  /* Every formula and rule the game teaches, by topic. The same lines show under each answer. */
+  function formulaSheet() {
+    const from = S.screen === 'trainmenu' ? 'train-menu' : 'home';
+    const blocks = B.SHEET.map((b) => `<section class="fs-desk" style="--d:var(--w-${b.desk})"><h2>${esc(DESKS[b.desk].code)} <span>${esc(DESKS[b.desk].long)}</span></h2><ul>${b.lines.map((l) => `<li>${esc(l.text)}</li>`).join('')}</ul></section>`).join('');
+    setScreen('formulas', 'home', `<section class="sheet formsheet"><h1 class="big">Formula sheet</h1><p>These show under every answer. Learn them here, then try the questions.</p>${blocks}</section>`,
+      { line: 'Scroll to read. Then go practice.', main: 'Back', act: from });
   }
   function trainGo(desk) {
     const seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
@@ -1446,7 +1464,7 @@
   }
   function trainStop() {
     const tr = S.train;
-    setScreen('trainend', 'home', `<section class="sheet"><h1 class="big">${esc((DESKS[tr.desk] || B.DRILL).long)}</h1><p class="bigline">${tr.right} of ${tr.total} right</p><p>Ready? Clock in and try to beat your best real pay.</p><div class="report-actions"><button type="button" class="btn ghost" data-act="train-menu">Practice another topic</button></div></section>`, { line: 'Go back to the start.', main: 'Home', act: 'home' });
+    setScreen('trainend', 'home', `<section class="sheet"><h1 class="big">${esc((DESKS[tr.desk] || (tr.desk === B.APSTYLE.key ? B.APSTYLE : B.DRILL)).long)}</h1><p class="bigline">${tr.right} of ${tr.total} right</p><p>Ready? Clock in and try to beat your best real pay.</p><div class="report-actions"><button type="button" class="btn ghost" data-act="train-menu">Practice another topic</button></div></section>`, { line: 'Go back to the start.', main: 'Home', act: 'home' });
   }
 
   /* ================= the Five Towns Cup (class mode) ================= */
@@ -1968,6 +1986,8 @@
     'toggle-sfx'() { toggleAudio('sfx'); },
     mute() { toggleMute(); },
     'train-menu': trainMenu,
+    formulas: formulaSheet,
+    'train-ap'() { trainGo(B.APSTYLE.key); },
     'train-go'(el) { trainGo(el.dataset.desk); },
     'train-stop'() { Run.done = true; Clock.stop(); trainStop(); },
     'cup-setup': cupSetup,

@@ -126,8 +126,22 @@
   const bins = (...keys) => keys.map((k) => Object.assign({ key: k }, BIN[k]));
   const plain = (...labels) => labels.map((l) => ({ key: l, label: l }));
 
-  let currentR = null; // set before each build, so answer positions change from deal to deal
-  const mix = (opts, keep) => (keep || !currentR ? opts : shuffle(currentR, opts));
+  /* Stamp and sort choices are a fixed menu (Gains, Loses, Protected), so they stay in the order they are written here,
+     on every deal. The teacher saw students who answer fast tap where "Gains" was last time and get it wrong
+     (Nov 17, 2026). The right answer still lands in different places, because the key changes from task to task. */
+  let currentR = null; // set before each build
+  const mix = (opts) => opts;
+  /* Number choices read low to high, the way the AP exam lists them. */
+  const lowToHigh = (list) => list.slice().sort((a, b) => a.v - b.v);
+  /* A word bank reads in one steady order: the cycle in cycle order, everything else A to Z. */
+  const WORD_ORDER = ['expansion', 'peak', 'contraction', 'trough'];
+  const steady = (labels) => {
+    const low = labels.map((l) => String(l).toLowerCase());
+    if (low.every((l) => WORD_ORDER.includes(l))) return labels.slice().sort((a, b) => WORD_ORDER.indexOf(String(a).toLowerCase()) - WORD_ORDER.indexOf(String(b).toLowerCase()));
+    const num = (l) => { const m = /^[^0-9\u2212-]*([\u2212-]?[0-9][0-9,]*\.?[0-9]*)/.exec(String(l)); return m ? Number(m[1].replace(/,/g, '').replace('\u2212', '-')) : null; };
+    if (labels.every((l) => num(l) !== null) && new Set(labels.map(num)).size === labels.length) return labels.slice().sort((a, b) => num(a) - num(b));
+    return labels.slice().sort((a, b) => String(a).toLowerCase().localeCompare(String(b).toLowerCase()));
+  };
   function sortTask(o) {
     const options = mix(o.options, o.keep);
     return finish(Object.assign({ verb: 'sort' }, o, { options, answer: options.findIndex((b) => b.key === o.key) }));
@@ -528,7 +542,7 @@
     }
     const correct = { label: shown, why: 'Right. ' + (o.right || o.work), v: o.value };
     correct.why = correct.why.length > 80 ? 'Right.' : correct.why;
-    const all = shuffle(o.r, [correct].concat(wrongs));
+    const all = lowToHigh([correct].concat(wrongs));
     return finish({
       id: o.id, desk: o.desk, verb: 'pick', lvl: o.lvl, order: o.order, ask: o.ask, text: o.text, table: o.table,
       options: all, answer: all.indexOf(correct), why: o.why || o.work, work: o.work, formula: o.formula,
@@ -1188,6 +1202,8 @@
      New numbers only. Never copy the teacher's test. Every kind here has drill: true, so Practice a topic can deal
      them as their own topic (DRILL), and the Solo deal leans on them a little. */
   const DRILL = { key: 'drill', code: 'Test tables', long: 'Messy tables and gaps' };
+  /* AP style: a practice topic that deals only the five-choice questions, from every desk (asked for Nov 17, 2026). */
+  const APSTYLE = { key: 'ap', code: 'AP style', long: 'Five-choice questions, all topics' };
   const cell = (n) => sign(n) + comma(n);
   const NAMES = [
     { c: 'Consumption spending', i: 'Gross private domestic investment', g: 'Government purchases' },
@@ -1415,6 +1431,7 @@
     if (!t) return null;
     t.id = `${k.id}:${(rec && rec.k) || i}`;
     t.kind = k.id;
+    if (api.learnFor) api.learnFor(t);
     return t;
   }
   function everyTask(seed) {
@@ -1430,6 +1447,7 @@
      Tier 0: two steps. Tier 1: three. Tier 2: four. Tier 3: the FRQ, five steps, like the review sheet. */
   function step(task, i, n, table, label) {
     const t = Object.assign({}, task, { table, part: `Step ${i + 1} of ${n}${label ? ': ' + label : ''}`, id: `${task.id || 'boss'}:s${i}` });
+    if (api.learnFor) api.learnFor(t);
     return t;
   }
   function pickFrom(o) { return numTask(o); }
@@ -1530,6 +1548,7 @@
     const recent = []; // the last few task types, so a shift keeps changing what your hands do
     const back = []; // misses waiting to return
     const verbUsed = {};
+    const told = new Set(); // scenarios already used this shift, so the same story does not come back as a different kind of task
     const skip = new Set((opts && opts.skipVerbs) || []);
     const fit = (t, range) => t.lvl >= range[0] && t.lvl <= range[1];
     function candidates(rank) {
@@ -1577,6 +1596,7 @@
             if (!t) { seen.add(`${c.k.id}:${(rec && rec.k) || c.k.records.indexOf(rec)}`); continue; }
             if (t.desk === lastDesk) continue;
             if (!fit(t, RANKS[rank].lvl)) continue;
+            if (t.text && t.text.length > 24 && told.has(t.text) && tries < 6) continue;
             return mark(t);
           }
         }
@@ -1587,6 +1607,7 @@
     }
     function mark(t) {
       seen.add(t.id);
+      if (t.text) told.add(t.text);
       deskCount[t.desk] = (deskCount[t.desk] || 0) + 1;
       verbUsed[t.verb] = (verbUsed[t.verb] || 0) + 1;
       recent.push(t.verb);
@@ -1636,7 +1657,7 @@
       if (!seen.has(fmt.usd(v))) { seen.add(fmt.usd(v)); uniq.push({ v, why: 'Check the arithmetic.' }); }
       extra++;
     }
-    const opts = shuffle(r, uniq.map((o) => ({ label: fmt.usd(o.v), why: o.why, v: o.v })));
+    const opts = lowToHigh(uniq.map((o) => ({ label: fmt.usd(o.v), why: o.why, v: o.v })));
     return { value, options: opts, answer: opts.findIndex((o) => o.v === value), work: `${fmt.usd(pay)} ÷ ${cpi} × 100 = ${fmt.usd(value)}` };
   }
 
@@ -1646,15 +1667,26 @@
     K.forEach((k) => k.records.forEach((rec, i) => {
       const id = `${k.id}:${(rec && rec.k) || i}`;
       if (!seen.has(id)) {
-        const d = deskKey === DRILL.key ? (k.drill ? DRILL.key : null) : deskOf(k, [rec]);
+        const d = deskKey === DRILL.key ? (k.drill ? DRILL.key : null) : deskKey === APSTYLE.key ? (k.verb === 'ap' ? APSTYLE.key : null) : deskOf(k, [rec]);
         if (d === deskKey) pool.push({ k, rec, i, id });
       }
     }));
     if (!pool.length) { seen.clear(); return trainingTask(deskKey, r, seen); }
+    // AP style mixes every topic. It deals from the topic seen least so far, never the same topic twice in a row,
+    // and counts a micro flashback three times so the Unit 2 topics get most of the turns.
+    let from = pool;
+    if (deskKey === APSTYLE.key) {
+      const dealt = seen.dealt || (seen.dealt = {});
+      const weight = (d) => (dealt[d] || 0) * (d === 'micro' ? 3 : 1) + (d === 'micro' ? 1.5 : 0);
+      const open = pool.filter((c) => deskOf(c.k, [c.rec]) !== seen.lastDesk);
+      const list = open.length ? open : pool;
+      const least = Math.min(...list.map((c) => weight(deskOf(c.k, [c.rec]))));
+      from = list.filter((c) => weight(deskOf(c.k, [c.rec])) === least);
+    }
     for (let tries = 0; tries < 30; tries++) {
-      const c = pickOne(r, pool);
+      const c = pickOne(r, from);
       const t = buildFrom(c.k, c.rec, r, c.i);
-      if (t) { seen.add(t.id); return t; }
+      if (t) { seen.add(t.id); seen.lastDesk = t.desk; if (seen.dealt) seen.dealt[t.desk] = (seen.dealt[t.desk] || 0) + 1; return t; }
     }
     return buildFrom(pool[0].k, pool[0].rec, r, pool[0].i);
   }
@@ -1711,7 +1743,7 @@
   }
 
   const api = {
-    DESKS, DRILL, VERBS, RANKS, BIN, ARROWS, KINDS: K, MINUS,
+    DESKS, DRILL, APSTYLE, VERBS, RANKS, BIN, ARROWS, KINDS: K, MINUS, F, steady,
     rng, shuffle, pickOne, fmt, wave, everyTask, boss, scheduler, payFor, streakMult, realPayOf, realPayQuestion, trainingTask, totalTasks, oneTask, calcEval, calcShow,
     _kit: { kind, finish, GEN, BUILD, SETS, bins, plain, VERB_CLOCK, VERB_PAY, VERB_WEIGHT, GDP, PEOPLE, EFFECTS, LOOP, REALNOM, COSTS, PHASES, NAMEIT, MICRO_ELASTIC, TYPES, MOVES, TOWNS, BOTHMOVES, PHIS, words },
   };

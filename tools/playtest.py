@@ -584,6 +584,10 @@ async ({every}) => {
     const form = document.querySelector('.form .form-text, .memo');
     if (form) { const r = form.getBoundingClientRect(); if (r.top < 0) prob.push('the question scrolled away'); }
     if (/\d\.\d{4,}/.test(document.querySelector('.task').innerText)) prob.push('a long decimal shows');
+    const said = document.querySelector('.verdict').innerText;
+    const bare = (x) => String(x || '').replace(/\.$/, '');
+    if (!t.learn) prob.push('no formula or rule on the task');
+    else if (!document.querySelector('.v-learn') && !said.includes(bare(t.learn.text))) prob.push('the answer does not show its formula or rule');
     if (prob.length) out.push(t.id + ' [' + t.verb + ']: ' + prob.join('; '));
   }
   return out;
@@ -973,6 +977,51 @@ def corners(b):
     assert_screen(page, 'trainend', 'Stop practicing ends training')
     shot(page, 'solo/phone-training-end')
     ctx.close()
+
+    # ---------- AP style practice, from the home screen, and the formula sheet
+    for size in ('phone', 'laptop'):
+        ctx, page = new_page(b, size, tag=f'ap-{size}')
+        check(page, f'home {size}')
+        page.locator('#go-ap').click(); page.wait_for_timeout(500)
+        assert_screen(page, 'task', 'AP style starts a task')
+        if page.evaluate('window.__se.S.train.desk') != 'ap':
+            problems.append('AP style: wrong practice topic')
+        desks, last = set(), None
+        for i in range(16):
+            t = page.evaluate('() => ({verb: window.__se.Run.t.verb, desk: window.__se.Run.t.desk, again: !!window.__se.Run.t.again, answer: window.__se.Run.t.answer, n: window.__se.Run.t.options.length})')
+            if t['verb'] != 'ap':
+                problems.append(f'AP style dealt a {t["verb"]} task')
+            desks.add(t['desk'])
+            pick = t['answer'] if i % 3 else (t['answer'] + 1) % t['n']
+            page.evaluate('window.__se.unlock()')
+            page.locator(f'.task button[data-i="{pick}"]').click(); page.wait_for_timeout(200)
+            if not page.locator('.v-learn').count():
+                problems.append(f'AP style {size}: no formula or rule under the answer')
+            if i in (0, 1):
+                shot(page, f'ap/{size}-{"miss" if i == 0 else "right"}')
+                check(page, f'AP style {"miss" if i == 0 else "right"} {size}')
+            page.evaluate('window.__se.unlock()')
+            page.locator('.v-next').click(); page.wait_for_timeout(120)
+        if len(desks) < 7:
+            problems.append(f'AP style {size}: only {len(desks)} topics in 16 questions')
+        page.evaluate('window.__se.unlock()')
+        page.locator('.tk-skip').click(); page.wait_for_timeout(250)
+        assert_screen(page, 'trainend', 'Stop practicing ends AP style')
+        if 'Five-choice' not in page.locator('h1.big').inner_text():
+            problems.append('AP style: the end screen should name the topic')
+        click_main(page); page.wait_for_timeout(300)
+        assert_screen(page, 'home', 'Home after AP style')
+        page.evaluate('window.__se.unlock()')
+        page.locator('[data-act="formulas"]').click(); page.wait_for_timeout(300)
+        assert_screen(page, 'formulas', 'the formula sheet opens')
+        if page.locator('.fs-desk').count() != 8 or page.locator('.fs-desk li').count() < 30:
+            problems.append('formula sheet: expected eight topics and at least 30 lines')
+        shot(page, f'ap/{size}-formula-sheet')
+        check(page, f'formula sheet {size}', tray=True)
+        click_main(page); page.wait_for_timeout(300)
+        assert_screen(page, 'home', 'Back from the formula sheet')
+        ctx.close()
+    report.append('AP style practice and the formula sheet: exercised at phone and laptop')
 
     # ---------- perks: each one changes what it says it changes
     ctx, page = new_page(b, 'laptop', tag='perks')

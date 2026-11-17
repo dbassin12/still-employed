@@ -50,7 +50,7 @@ Object.keys(B.DESKS).forEach((d) => {
     }
     lines.push(`Why: ${t.why}`);
     if (t.work && t.work !== t.why) lines.push(`Work: ${t.work}`);
-    if (t.formula) lines.push(`Formula shown: ${t.formula}`);
+    if (t.learn) lines.push(`${t.learn.label} shown with the answer: ${t.learn.text}`);
     lines.push('');
   });
 });

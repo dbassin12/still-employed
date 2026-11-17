@@ -522,6 +522,24 @@ body.answered .keypad { display: none; }
 .v-why.small { font-size: .95rem; font-style: italic; }
 .v-work { font-size: .98rem; font-weight: 700; margin-top: .14rem; overflow-wrap: anywhere; }
 .v-note { font-size: .9rem; margin-top: .14rem; }
+/* the formula or rule under every answer. On a wide screen it sits on the first line, to the right of Right or Wrong,
+   so the verdict gets no taller. Lines stay under 100 characters so they fit there (bank.test.js). */
+.v-learn { font-size: .88rem; line-height: 1.17; margin-top: .16rem; padding-top: .14rem; border-top: .08rem dashed rgba(26, 23, 64, .45); }
+.v-learn b { font-weight: 800; }
+@media (min-aspect-ratio: 11/10) {
+  .v-text:has(.v-learn) { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 1.4rem; align-items: baseline; }
+  .v-text:has(.v-learn) > * { grid-column: 1 / -1; }
+  .v-text:has(.v-learn) > .v-head { grid-column: 1; grid-row: 1; }
+  .v-text:has(.v-learn) > .v-learn { grid-column: 2; grid-row: 1; margin: 0; padding: 0; border: 0; text-align: right; font-size: .86rem; line-height: 1.15; }
+}
+/* formula sheet */
+.formsheet { text-align: left; }
+.fs-desk { margin-top: .7rem; border-left: .5rem solid var(--d); padding-left: .7rem; }
+.fs-desk h2 { font: 400 1.15rem var(--slab); }
+.fs-desk h2 span { font: 400 .95rem var(--body); margin-left: .3rem; }
+.fs-desk ul { list-style: none; margin: .2rem 0 0; padding: 0; }
+.fs-desk li { font-size: 1rem; line-height: 1.25; padding: .22rem 0; border-top: .06rem solid rgba(26, 23, 64, .18); }
+.fs-desk li:first-child { border-top: 0; }
 .v-next { flex: none; align-self: stretch; }
 .stealbar { height: .55rem; background: rgba(21, 21, 58, .2); margin-top: .35rem; overflow: hidden; }
 .stealbar i { display: block; height: 100%; background: var(--ink); transform-origin: left; }
@@ -566,6 +584,7 @@ body.answered .keypad { display: none; }
 .home-lede { font-size: 1.25rem; font-weight: 700; line-height: 1.24; }
 .modes { display: grid; gap: .6rem; grid-template-columns: 1fr; }
 @media (min-aspect-ratio: 11/10) { .modes { grid-template-columns: 1fr 1fr; } }
+@media (min-aspect-ratio: 11/10) { .mode.wide { grid-column: 1 / -1; } }
 .mode { display: flex; flex-direction: column; gap: .08rem; text-align: left; padding: .75rem .95rem; color: var(--ink); background: var(--paper); border: .2rem solid var(--ink); border-radius: 3px; box-shadow: 0 .32rem 0 var(--ink); }
 .mode.alt { background: var(--bond); }
 .mode:active { transform: translateY(.26rem); box-shadow: 0 .06rem 0 var(--ink); }
@@ -750,3 +769,15 @@ body.answered .keypad { display: none; }
   #calc[hidden] { display: none; }
   .calc-keys .keybtn { min-height: 2.1rem; font-size: 1.1rem; }
 }
+
+/* short phones (an iPhone SE): the verdict gives its width to the words, so the formula line fits without covering the task */
+@media (max-height: 720px) and (max-aspect-ratio: 11/10) {
+  .verdict { padding: .4rem .65rem .5rem; gap: .35rem .5rem; }
+  .verdict .face { display: none; }
+  .verdict .v-ans { font-size: 1.02rem; }
+  .verdict .v-why, .verdict .v-work { font-size: .93rem; line-height: 1.18; }
+  .verdict .v-learn { font-size: .86rem; line-height: 1.16; margin-top: .16rem; padding-top: .14rem; }
+  .verdict .v-next { min-height: 2.5rem; padding-top: .3rem; padding-bottom: .3rem; }
+}
+/* narrow phones: the calculator button is its icon, so it never runs into Stop practicing */
+@media (max-width: 380px) { .tk-head .calc-word { display: none; } .tk-head .calcbtn { padding: .05rem .4rem; } }

@@ -898,3 +898,115 @@ test('inflation line: one year fits each ask, recomputed from the rates', () => 
   }
   assert.ok(list.some((t) => t.chart.prop === 'level' && t.chart.pts.every((p, i, a) => p.v > 0 && (i === 0 || p.v < a[i - 1].v)) && t.answer === 4), 'need the falling line where prices still end highest');
 });
+
+/* ---------- Nov 17, 2026: answers stay put, AP style practice, a formula with every answer ---------- */
+test('answer buttons stay put: the same set of choices always comes in the same order', () => {
+  const orders = {};
+  for (const seed of [1, 2, 3, 4, 5, 6]) {
+    for (const t of B.everyTask(seed)) {
+      if (!['stamp', 'sort', 'blank', 'pick'].includes(t.verb)) continue;
+      const labels = t.options.map((o) => o.label);
+      const key = t.kind + ' | ' + labels.slice().sort().join(' | ');
+      orders[key] = orders[key] || new Set();
+      orders[key].add(labels.join(' | '));
+    }
+  }
+  const moved = Object.entries(orders).filter(([, set]) => set.size > 1).map(([k]) => k);
+  assert.deepEqual(moved, [], 'these choices change places from deal to deal: ' + moved.slice(0, 3).join(' // '));
+  // the menus students see most: Gains, Loses, Protected is always in that order
+  for (const t of every.filter((x) => x.kind === 'effect')) assert.deepEqual(t.options.map((o) => o.label), ['Gains', 'Loses', 'Protected'], t.id);
+  for (const t of every.filter((x) => x.kind === 'counted')) assert.equal(t.options.map((o) => o.label).join('|'), every.find((x) => x.kind === 'counted').options.map((o) => o.label).join('|'), t.id);
+});
+test('number choices read low to high', () => {
+  for (const t of every.filter((x) => x.verb === 'pick')) {
+    const vs = t.options.map((o) => o.v);
+    assert.ok(vs.every((v) => typeof v === 'number'), t.id);
+    for (let i = 1; i < vs.length; i++) assert.ok(vs[i] > vs[i - 1], `${t.id}: ${t.options.map((o) => o.label).join(', ')}`);
+  }
+  const places = new Set(every.filter((x) => x.verb === 'pick').map((t) => t.answer));
+  assert.equal(places.size, 4, 'the right number should still land in every position');
+});
+test('AP style: the right answer is never the longest choice, and lands on every letter', () => {
+  const list = every.filter((t) => t.verb === 'ap');
+  assert.ok(list.length >= 240, 'only ' + list.length + ' AP style questions');
+  for (const t of list.filter((x) => x.kind.startsWith('ap-'))) {
+    const key = t.options[t.answer].label.length, rest = Math.max(...t.options.filter((o, i) => i !== t.answer).map((o) => o.label.length));
+    assert.ok(key <= rest, `${t.id}: the key is the longest choice: ${t.options[t.answer].label}`);
+  }
+  const by = {};
+  list.forEach((t) => { by[t.desk] = (by[t.desk] || 0) + 1; });
+  for (const d of ['gdp', 'miss', 'jobs', 'prices', 'costs', 'real', 'cycle']) assert.ok(by[d] >= 28, `${d} has only ${by[d]} AP style questions`);
+  const letters = {};
+  for (const seed of [1, 2, 3]) B.everyTask(seed).filter((t) => t.verb === 'ap').forEach((t) => { letters[t.answer] = (letters[t.answer] || 0) + 1; });
+  assert.equal(Object.keys(letters).length, 5);
+});
+test('AP style with numbers: every key is worked out again here, and the choices read low to high', () => {
+  const again = {
+    urate: ([e, u]) => 100 * u / (e + u),
+    lfpr: ([e, u, n]) => 100 * (e + u) / (e + u + n),
+    gdp: ([c, i, g, x, m]) => c + i + g + (x - m),
+    cpi: ([base, now]) => 100 * now / base,
+    infl: ([was, is]) => 100 * (is - was) / was,
+    realgdp: ([nom, def]) => 100 * nom / def,
+    deflator: ([nom, real]) => 100 * nom / real,
+    realrate: ([nominal, inflation]) => nominal - inflation,
+    percap: ([billions, millions]) => (billions * 1e9) / (millions * 1e6),
+    gap: ([actual, potential]) => 100 * (actual - potential) / potential,
+    cyclical: ([actual, natural]) => actual - natural,
+    realwage: ([wage, cpi]) => 100 * wage / cpi,
+  };
+  const list = every.filter((t) => t.kind.startsWith('apn-'));
+  assert.ok(list.length >= 60, 'only ' + list.length);
+  const kinds = new Set();
+  for (const t of list) {
+    const f = again[t.apn.k];
+    assert.ok(f, t.id + ' has no check');
+    kinds.add(t.apn.k);
+    assert.equal(t.options.length, 5, t.id);
+    assert.equal(new Set(t.options.map((o) => o.label)).size, 5, `${t.id}: two choices read the same: ${t.options.map((o) => o.label).join(', ')}`);
+    assert.ok(Math.abs(t.options[t.answer].v - f(t.apn.set)) < 1e-9, `${t.id}: key ${t.options[t.answer].v}, should be ${f(t.apn.set)}`);
+    for (let i = 1; i < 5; i++) assert.ok(t.options[i].v > t.options[i - 1].v, t.id + ' is not low to high');
+    // a wrong choice must not round to the same label as the key
+    t.options.forEach((o, i) => { if (i !== t.answer) assert.ok(Math.abs(o.v - t.options[t.answer].v) > 0.04, `${t.id}: ${o.label} is too close to the key`); });
+  }
+  assert.equal(kinds.size, Object.keys(again).length, 'every number template should deal');
+});
+test('AP style practice deals only AP style questions and moves through every topic', () => {
+  const seen = new Set(), desks = {};
+  const r = B.rng(11);
+  let last = null, sameInARow = 0;
+  for (let i = 0; i < 80; i++) {
+    const t = B.trainingTask(B.APSTYLE.key, r, seen);
+    assert.equal(t.verb, 'ap', t.id);
+    desks[t.desk] = (desks[t.desk] || 0) + 1;
+    if (t.desk === last) sameInARow++;
+    last = t.desk;
+  }
+  assert.equal(Object.keys(desks).length, 8, 'topics dealt: ' + Object.keys(desks));
+  assert.equal(sameInARow, 0, 'two questions in a row came from the same topic');
+  const unit2 = Object.keys(desks).filter((d) => d !== 'micro').map((d) => desks[d]);
+  assert.ok(Math.max(...unit2) - Math.min(...unit2) <= 1, 'Unit 2 topics should come up equally: ' + JSON.stringify(desks));
+  assert.ok(desks.micro >= 2 && desks.micro <= Math.min(...unit2) / 2, 'micro flashbacks should be a small share: ' + JSON.stringify(desks));
+});
+test('every answer comes with a formula or a rule', () => {
+  for (const seed of [1, 2]) {
+    for (const t of B.everyTask(seed)) {
+      assert.ok(t.learn && (t.learn.label === 'Formula' || t.learn.label === 'Rule'), t.id + ' has no formula or rule');
+      assert.ok(t.learn.text.length >= 12 && t.learn.text.length <= 100, `${t.id}: ${t.learn.text.length} characters: ${t.learn.text}`);
+      assert.ok(!/undefined|[–—]/.test(t.learn.text), `${t.id}: ${t.learn.text}`);
+      assert.equal(t.learn.label === 'Formula', /[=≈]/.test(t.learn.text), `${t.id}: a formula has an equals sign: ${t.learn.text}`);
+      if (t.formula) assert.equal(t.learn.text, t.formula, t.id);
+    }
+  }
+  // the lines that matter most are the ones a student would expect
+  const one = (kindId) => every.find((t) => t.kind === kindId).learn.text;
+  assert.match(one('effect'), /^Real (interest rate|rate|value) =/);
+  assert.match(one('who'), /^Labor force = employed \+ unemployed/);
+  assert.match(one('counted'), /^GDP = the market value of new, final goods and services/);
+  assert.match(one('nameit'), /^Inflation rate = /);
+  assert.match(one('sign'), /^Output gap = /);
+  for (const step of B.boss(2, B.rng(5))) assert.ok(step.learn && step.learn.text, 'a Release step has no formula');
+  // the formula sheet lists real lines for all eight desks
+  assert.equal(B.SHEET.length, 8);
+  B.SHEET.forEach((b) => { assert.ok(B.DESKS[b.desk], b.desk); assert.ok(b.lines.length >= 3); b.lines.forEach((l) => assert.ok(l && l.text && !/undefined/.test(l.text), b.desk)); });
+});
