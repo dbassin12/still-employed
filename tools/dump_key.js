@@ -18,7 +18,7 @@ Object.keys(B.DESKS).forEach((d) => {
     if (counts[k] > limit) return;
     lines.push(`**${t.id}** (${t.verb}, level ${t.lvl}). ${t.order}${t.ask ? ' ' + t.ask : ''}`);
     if (t.text) lines.push(`> ${t.text}`);
-    if (t.table) lines.push(`> Data: ${t.table.map((r) => r[0] + ' = ' + r[1]).join('; ')}`);
+    if (t.table) lines.push(`> Data: ${(t.thead ? t.thead.join(' / ') + ': ' : '') + t.table.map((r) => (t.thead ? r.join(' / ') : r[0] + ' = ' + r[1])).join('; ')}`);
     if (t.verb === 'order') { t.answer.forEach((idx, n) => lines.push(`- ${n + 1}. ${t.options[idx].label}`)); }
     else if (t.verb === 'match') { t.left.forEach((l, i) => lines.push(`- ${l} = ${t.right[t.answer[i]]}`)); }
     else if (t.verb === 'type' || t.verb === 'dial') { lines.push(`- * ${t.calc.shown}`); (t.wrongVals || []).forEach((w) => lines.push(`- typed ${w.v}: ${w.why}`)); }
@@ -58,7 +58,7 @@ lines.push('## The 8:30 Release and The Big Release (sample chains)', '');
 for (const tier of [0, 1, 3]) {
   B.boss(tier, B.rng(tier + 5)).forEach((t) => {
     lines.push(`**${t.title}, ${t.part}.** ${t.order}${t.ask ? ' ' + t.ask : ''}`);
-    lines.push(`> Data: ${t.table.map((r) => r[0] + ' = ' + r[1]).join('; ')}`);
+    lines.push(`> Data: ${(t.thead ? t.thead.join(' / ') + ': ' : '') + t.table.map((r) => (t.thead ? r.join(' / ') : r[0] + ' = ' + r[1])).join('; ')}`);
     t.options.forEach((o, i) => lines.push(`- ${i === t.answer ? '* ' : ''}${o.label}${o.why && t.verb === 'pick' ? ' (' + o.why + ')' : ''}`));
     lines.push(`Why: ${t.why}`, '');
   });

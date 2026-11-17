@@ -155,7 +155,12 @@
   const optBtn = (i, label, extra, cls) => `<button type="button" class="opt ${cls || ''}" data-act="pick" data-i="${i}" data-key="${i + 1}"><kbd>${i + 1}</kbd><span class="opt-text"><span class="opt-label">${esc(label)}</span>${extra || ''}</span></button>`;
   const defLine = (o, opts) => (opts.hints && o.def ? `<small class="opt-def">${esc(o.def)}</small>` : '');
   const formHTML = (inner, cls) => `<article class="form ${cls || ''}"><span class="punch" aria-hidden="true"></span>${inner}<span class="stamp-spot" id="stamp-spot"></span></article>`;
-  const tableHTML = (t) => (t.table && t.table.length ? `<table class="data${t.table.length > 4 ? ' many' : ''}"><tbody>${t.table.map((r) => `<tr><th scope="row">${esc(r[0])}</th><td>${esc(r[1])}</td></tr>`).join('')}</tbody></table>` : '');
+  // A table is rows of [label, value]. With t.thead it is a grid: a heading row, then [label, value, value, ...].
+  const tableHTML = (t) => {
+    if (!t.table || !t.table.length) return '';
+    if (t.thead) return `<table class="data grid"><thead><tr>${t.thead.map((h) => `<th scope="col">${esc(h)}</th>`).join('')}</tr></thead><tbody>${t.table.map((r) => `<tr><th scope="row">${esc(r[0])}</th>${r.slice(1).map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    return `<table class="data${t.table.length > 4 ? ' many' : ''}"><tbody>${t.table.map((r) => `<tr><th scope="row">${esc(r[0])}</th><td>${esc(r[1])}</td></tr>`).join('')}</tbody></table>`;
+  };
   const formulaHTML = (t, o) => (o.formula && t.formula ? `<p class="cheat">${esc(t.formula)}</p>` : '');
 
   const VIEW = {
@@ -1473,7 +1478,7 @@
   const FINAL_PAY = 500;
   const STEAL_MS = 8000;
   const CUP_KEY = 'still-employed:cup';
-  const CUP_SKIP = ['ap', 'badcell']; // too long for one player's turn on the big screen
+  const CUP_SKIP = ['ap', 'badcell', 'm-basket']; // too long for one player's turn on the big screen
   const saveCup = () => { const c = S.cup; if (!c) return; const copy = Object.assign({}, c); delete copy.r; delete copy.sch; delete copy.task; delete copy.finalSteps; store.set(CUP_KEY, JSON.stringify(copy)); };
   const loadCup = () => { try { const c = JSON.parse(store.get(CUP_KEY) || 'null'); return c && c.towns && c.phase !== 'over' ? c : null; } catch (e) { return null; } };
   const clearCup = () => store.set(CUP_KEY, 'null');

@@ -404,6 +404,11 @@
     { k: 'firmdebt', t: 'A firm that borrowed at a fixed rate from a bank.', key: 'loses', lvl: 3, y: 'A fixed-rate borrower loses when prices unexpectedly fall.' },
     { k: 'cash', t: 'Someone holding $2,000 in cash.', key: 'gains', lvl: 3, y: 'Cash buys more when prices fall.' },
     { k: 'gov', t: 'The government, which owes money on fixed-rate bonds.', key: 'loses', lvl: 3, y: 'It is a fixed-rate borrower. Surprise deflation hurts borrowers.' },
+    /* added Nov 17, 2026: a saver is a lender too, and the bank that owes the saver is the borrower */
+    { k: 'saver', t: 'A saver with a fixed-rate savings account at a bank.', key: 'gains', lvl: 3, y: 'The saver is the lender here. The fixed interest buys more when prices fall.' },
+    { k: 'paysavers', t: 'A bank that owes its savers a fixed rate of interest.', key: 'loses', lvl: 3, y: 'Here the bank is the borrower. It repays savers in dollars worth more.' },
+    { k: 'bondholder', t: 'Someone who owns a fixed-rate government bond.', key: 'gains', lvl: 3, y: 'A bondholder is a lender. The fixed payments buy more when prices fall.' },
+    { k: 'lease', t: 'A shop that signed a two-year lease at a fixed rent.', key: 'loses', lvl: 3, y: 'The rent is fixed while other prices fall, so it costs more in real terms.' },
   ];
   const LOANS = [[5, 2, 8], [6, 2, 5], [7, 3, 9], [4, 2, 2], [6, 3, 1], [8, 4, 4], [5, 3, 6], [7, 5, 3], [9, 4, 7], [5, 2, 0], [6, 4, 4], [10, 6, 9]];
   const COSTS = [
@@ -544,7 +549,7 @@
     correct.why = correct.why.length > 80 ? 'Right.' : correct.why;
     const all = lowToHigh([correct].concat(wrongs));
     return finish({
-      id: o.id, desk: o.desk, verb: 'pick', lvl: o.lvl, order: o.order, ask: o.ask, text: o.text, table: o.table,
+      id: o.id, desk: o.desk, verb: 'pick', lvl: o.lvl, order: o.order, ask: o.ask, text: o.text, table: o.table, thead: o.thead,
       options: all, answer: all.indexOf(correct), why: o.why || o.work, work: o.work, formula: o.formula,
       calc: Object.assign({ f: o.calcF, in: o.calcIn, value: o.value, shown, fmt: Object.keys(fmt).find((k) => fmt[k] === f) }, o.calcExtra || {}),
     });
@@ -569,6 +574,8 @@
     natural: 'Natural rate = frictional + structural',
     gap: 'Output gap % = (actual ' + MINUS + ' potential) ÷ potential × 100',
     realrate: 'Real interest rate = nominal rate ' + MINUS + ' inflation rate',
+    basketinfl: 'Cost of the basket = price × quantity, added up. Then (new ' + MINUS + ' old) ÷ old × 100',
+    basketcpi: 'Cost of the basket = price × quantity, added up. CPI = cost ÷ base-year cost × 100',
   };
 
   /* Number sets are written out, not random, so everyTask() can list and check every one. */
@@ -1198,7 +1205,8 @@
   /* ================= test-style tables (added Nov 16, 2026) =================
      The other math tables in this game are clean. AP tables are not: they mix in taxes, depreciation, transfers,
      income items, or the whole population, and the student has to pick the right rows. These kinds drill that,
-     plus the words "recessionary gap" and "inflationary gap", plus inventories of goods made abroad.
+     plus the words "recessionary gap" and "inflationary gap", plus inventories of goods made abroad, plus (Nov 17)
+     the CPI worked out from a whole basket table.
      New numbers only. Never copy the teacher's test. Every kind here has drill: true, so Practice a topic can deal
      them as their own topic (DRILL), and the Solo deal leans on them a little. */
   const DRILL = { key: 'drill', code: 'Test tables', long: 'Messy tables and gaps' };
@@ -1287,6 +1295,10 @@
     { k: 'gw10', lvl: 2, t: 'Cyclical unemployment is zero.', key: 'fullemp', y: 'No cyclical unemployment means full employment, at potential.' },
     { k: 'gw11', lvl: 3, t: 'Cyclical unemployment is negative.', key: 'infgap', y: 'Unemployment is below the natural rate, so real GDP is above potential.' },
     { k: 'gw12', lvl: 2, t: 'The economy is at a trough.', key: 'recgap', y: 'At a trough, real GDP is at its lowest point, below potential. Recessionary gap.' },
+    /* added Nov 17, 2026: the turning points, said the other ways a test says them */
+    { k: 'gw13', lvl: 2, t: 'Real GDP has hit the bottom of the business cycle.', key: 'recgap', y: 'The bottom is the trough. Real GDP is below potential there. Recessionary gap.' },
+    { k: 'gw14', lvl: 2, t: 'The economy is at a peak.', key: 'infgap', y: 'At a peak, real GDP is at its highest point, above potential. Inflationary gap.' },
+    { k: 'gw15', lvl: 3, t: 'A long contraction has just ended, and unemployment is at its highest.', key: 'recgap', y: 'That is the trough. Unemployment is above the natural rate, so real GDP is below potential.' },
   ];
   const STOCKS = [
     { k: 'st1', lvl: 2, t: 'A Lawrence store ends the year with more Italian-made sneakers on its shelves.', key: 'out', y: 'Investment goes up, but imports go up by the same amount. U.S. GDP does not change.' },
@@ -1296,6 +1308,48 @@
     { k: 'st5', lvl: 2, t: 'A Long Island bike shop ends the year with more bikes made this year in Ohio.', key: 'in', y: 'New and made in the U.S. A rise in inventories counts as investment.' },
     { k: 'st6', lvl: 3, t: "A Cedarhurst toy store sells toys it had in stock since last year.", key: 'out', y: 'Made last year and counted then, as inventory. C goes up, inventories go down. No change.' },
   ];
+
+  /* A CPI basket as a full table (added Nov 17, 2026): three items, a quantity that never changes, and two years of
+     prices. The student costs the basket in each year, then finds the percent change (ask: 'change') or the Year 2
+     index (ask: 'index'). Each wrong number is a named mistake. New items and new numbers only. */
+  const BASKET_TABLES = [
+    { k: 'bk1', lvl: 2, ask: 'change', rows: [['Bagels', 10, 2, 3], ['Bus rides', 8, 2, 2], ['Haircuts', 1, 24, 26]] },
+    { k: 'bk2', lvl: 3, ask: 'change', rows: [['Notebooks', 10, 2, 3], ['Lunches', 6, 8, 9], ['Movie tickets', 2, 16, 13]] },
+    { k: 'bk3', lvl: 3, ask: 'change', rows: [['Gallons of gas', 20, 3, 2], ['Bananas', 10, 1, 1], ['T-shirts', 2, 15, 20]] },
+    { k: 'bk4', lvl: 2, ask: 'index', rows: [['Apples', 10, 1, 2], ['Sandwiches', 2, 10, 8], ['Bus passes', 1, 20, 24]] },
+    { k: 'bk5', lvl: 2, ask: 'index', rows: [['Gym visits', 10, 8, 10], ['Textbooks', 2, 40, 45], ['Phone plan', 1, 40, 40]] },
+    { k: 'bk6', lvl: 2, ask: 'change', rows: [['Pizza slices', 10, 2, 3], ['Juice bottles', 6, 2, 3], ['Concert tickets', 2, 24, 21]] },
+    { k: 'bk7', lvl: 3, ask: 'index', rows: [['Bread loaves', 10, 2, 3], ['Milk cartons', 10, 3, 2], ['Backpacks', 1, 70, 76]] },
+    { k: 'bk8', lvl: 3, ask: 'change', rows: [['Coffees', 10, 2, 3], ['Laundry loads', 2, 10, 10], ['Bus passes', 1, 10, 15]] },
+  ];
+  const BASKET_HEAD = ['Item', 'Quantity', 'Year 1', 'Year 2'];
+  GEN.baskettable = (o, r) => {
+    const q = o.rows.map((x) => x[1]), a = o.rows.map((x) => x[2]), b = o.rows.map((x) => x[3]);
+    const sum = (xs) => xs.reduce((s, x) => s + x, 0);
+    const old = sum(q.map((n, i) => n * a[i])), neu = sum(q.map((n, i) => n * b[i]));
+    const noQty = (sum(b) - sum(a)) / sum(a) * 100; // the prices added up with no quantities
+    const table = o.rows.map(([name, n, p1, p2]) => [name, fmt.num(n), fmt.usd(p1), fmt.usd(p2)]);
+    const costs = `Year 1: ${q.map((n, i) => n * a[i]).join(' + ')} = ${fmt.usd(old)}. Year 2: ${q.map((n, i) => n * b[i]).join(' + ')} = ${fmt.usd(neu)}.`;
+    const base = { r, desk: 'prices', lvl: o.lvl, table, thead: BASKET_HEAD, calcIn: { q, a, b } };
+    let t;
+    if (o.ask === 'index') {
+      const v = neu / old * 100;
+      t = numTask(Object.assign(base, {
+        order: 'CPI IN YEAR 2?', ask: 'Year 1 is the base year. Prices are for one of each item.', fmt: fmt.idx, value: v, calcF: 'basketindex', formula: F.basketcpi,
+        wrongs: [{ v: old / neu * 100, why: 'That is upside down. Put the Year 2 cost on top.' }, { v: (neu - old) / old * 100, why: 'That is the percent change. The index is 100 plus that.' }, { v: sum(b) / sum(a) * 100, why: 'That adds the prices and skips the quantities.' }, { v: 100 + (neu - old), why: 'That adds the dollar change to 100. Divide by the Year 1 cost.' }],
+        work: `${costs} ${fmt.num(neu)} ÷ ${fmt.num(old)} × 100 = ${fmt.idx(v)}`,
+      }));
+    } else {
+      const v = (neu - old) / old * 100;
+      t = numTask(Object.assign(base, {
+        order: 'HOW MUCH DID THE CPI CHANGE?', ask: 'The basket stays the same. Prices are for one of each item.', value: v, calcF: 'basketchange', formula: F.basketinfl,
+        wrongs: [{ v: (neu - old) / neu * 100, why: 'That divides by the Year 2 cost. Divide by the Year 1 cost.' }, { v: noQty, why: 'That adds the prices and skips the quantities.' }, { v: neu / old * 100, why: 'That is the new index. The change is the index minus 100.' }, { v: -v, why: 'Check the direction. Compare the Year 2 cost with Year 1.' }],
+        work: `${costs} (${fmt.num(neu)} ${MINUS} ${fmt.num(old)}) ÷ ${fmt.num(old)} × 100 = ${fmt.pct(v)}`,
+      }));
+    }
+    t.clock = Math.max(t.clock, 100); // six products, two sums, then a division: the longest math in the game
+    return t;
+  };
 
   const spendRows = (o, r) => {
     const nm = NAMES[o.n || 0];
@@ -1387,6 +1441,7 @@
   kind('m-urate', 'jobs', 'pick', POP_JOBS, (o, r) => GEN.popurate(o, r), { drill: true });
   kind('m-lfpr', 'jobs', 'pick', POP_JOBS, (o, r) => GEN.poplfpr(o, r), { drill: true });
   kind('m-lfu', 'jobs', 'pick', POP_LF, (o, r) => GEN.lfurate(o, r), { drill: true });
+  kind('m-basket', 'prices', 'pick', BASKET_TABLES, (o, r) => GEN.baskettable(o, r), { drill: true });
   kind('m-gapcall', 'cycle', 'sort', GAP_CALLS, (o) => {
     const { urate, key } = gapCall(o);
     const u = o.lf - o.e;
@@ -1553,7 +1608,7 @@
     const fit = (t, range) => t.lvl >= range[0] && t.lvl <= range[1];
     function candidates(rank) {
       const range = RANKS[rank].lvl;
-      return K.filter((k) => !skip.has(k.verb)).map((k) => {
+      return K.filter((k) => !skip.has(k.verb) && !skip.has(k.id)).map((k) => {
         const open = k.records.filter((rec, i) => !seen.has(`${k.id}:${(rec && rec.k) || i}`) && recordFits(k, rec, range));
         return { k, open };
       }).filter((c) => c.open.length);

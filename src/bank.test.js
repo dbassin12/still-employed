@@ -25,6 +25,8 @@ const FORMULAS = {
   realwage: ({ wage, cpi }) => wage / cpi * 100,
   convert: ({ price, a, b }) => price * b / a,
   basket: ({ q1, p1, q2, p2 }) => q1 * p1 + q2 * p2,
+  basketchange: ({ q, a, b }) => { const cost = (p) => q.reduce((s, n, i) => s + n * p[i], 0); return (cost(b) - cost(a)) / cost(a) * 100; },
+  basketindex: ({ q, a, b }) => { const cost = (p) => q.reduce((s, n, i) => s + n * p[i], 0); return cost(b) / cost(a) * 100; },
   realgdp: ({ nom, def }) => nom / def * 100,
   deflator: ({ nom, real }) => nom / real * 100,
   nominal: ({ real, def }) => real * def / 100,
@@ -582,8 +584,13 @@ test('answer positions are mixed: the right answer is not always in the same pla
 });
 
 test('the class game can leave out the long question types', () => {
-  const sch = B.scheduler(B.rng(4), { seen: new Set(), skipVerbs: ['ap', 'badcell'] });
+  const sch = B.scheduler(B.rng(4), { seen: new Set(), skipVerbs: ['ap', 'badcell', 'm-basket'] });
   for (let i = 0; i < 40; i++) { const t = sch.next(i < 10 ? 1 : 3); assert.ok(t.verb !== 'ap' && t.verb !== 'badcell', t.id); }
+  // a single kind can be left out by its id: the basket table is too long for one turn in the class game
+  for (const seed of [5, 6, 7, 8]) {
+    const cup = B.scheduler(B.rng(seed), { seen: new Set(), skipVerbs: ['ap', 'badcell', 'm-basket'] });
+    for (let i = 0; i < 60; i++) assert.notEqual(cup.next(3).kind, 'm-basket');
+  }
 });
 
 test('rank 0 only deals easy tasks', () => {
@@ -688,8 +695,8 @@ const drillTasks = every.filter((t) => B.KINDS.find((k) => k.id === t.kind).dril
 
 test('test-style tables: every drill kind deals, and there are enough of them', () => {
   const kinds = new Set(drillTasks.map((t) => t.kind));
-  ['m-gdp', 'm-mixed', 'm-income', 'm-urate', 'm-lfpr', 'm-lfu', 'm-gapcall', 'm-gapword', 'm-stock'].forEach((k) => assert.ok(kinds.has(k), k + ' is missing'));
-  assert.ok(drillTasks.length >= 55, 'only ' + drillTasks.length + ' drill tasks');
+  ['m-gdp', 'm-mixed', 'm-income', 'm-urate', 'm-lfpr', 'm-lfu', 'm-gapcall', 'm-gapword', 'm-stock', 'm-basket'].forEach((k) => assert.ok(kinds.has(k), k + ' is missing'));
+  assert.ok(drillTasks.length >= 66, 'only ' + drillTasks.length + ' drill tasks');
 });
 
 test('test-style tables: the key uses only the right rows, and some rows are left out', () => {
@@ -713,7 +720,17 @@ test('test-style tables: the key uses only the right rows, and some rows are lef
     } else if (t.kind === 'm-lfu') {
       const lf = rows.find(([l]) => l === 'Labor force')[1], e = rows.find(([l]) => l === 'Employed')[1];
       want = (lf - e) / lf * 100;
-    }
+    } else if (t.kind === 'm-basket') {
+      // item, quantity, Year 1 price, Year 2 price: cost the same basket in each year
+      assert.deepEqual(t.thead, ['Item', 'Quantity', 'Year 1', 'Year 2'], t.id);
+      assert.equal(t.table.length, 3, t.id + ' should have three items');
+      const y1 = t.table.reduce((s, r) => s + num(r[1]) * num(r[2]), 0), y2 = t.table.reduce((s, r) => s + num(r[1]) * num(r[3]), 0);
+      want = /CHANGE/.test(t.order) ? (y2 - y1) / y1 * 100 : y2 / y1 * 100;
+      assert.ok(Number.isInteger(y1) && Number.isInteger(y2) && y1 !== y2, t.id);
+      assert.ok(Math.abs(want * 2 - Math.round(want * 2)) < 1e-9, `${t.id}: ${want} is not a clean answer`);
+      assert.ok(t.table.some((r) => num(r[2]) !== num(r[3])) && new Set(t.table.map((r) => r[1])).size > 1, t.id + ': the quantities should matter');
+      assert.ok(t.clock >= 100, t.id + ' needs a long clock');
+    } else assert.fail(t.id + ' has no check here');
     assert.ok(Math.abs(want - t.calc.value) < 1e-6, `${t.id}: rows give ${want}, bank says ${t.calc.value}`);
     assert.equal(t.options[t.answer].label, t.calc.shown, t.id);
     t.options.filter((o, i) => i !== t.answer).forEach((o) => assert.notEqual(o.why, 'Check the arithmetic.', `${t.id}: ${o.label} has no named mistake`));
@@ -743,12 +760,40 @@ test('the Test tables practice topic deals only drill kinds, and reaches all of 
 
 test('test-style tables share no more than two numbers with any table on the real test', { skip: !guard || !guard.tables }, () => {
   for (const t of drillTasks.filter((x) => x.table)) {
-    const mine = new Set(t.table.map(([, v]) => num(v)));
+    const mine = new Set(t.table.flatMap((row) => row.slice(1).map(num)));
     for (const real of guard.tables) {
       const same = real.filter((v) => mine.has(v)).length;
       assert.ok(same <= 2, `${t.id} shares ${same} numbers with a test table`);
     }
   }
+});
+
+test('a table with a heading row has a cell under every heading, and a plain table has two', () => {
+  for (const t of every.filter((x) => x.table)) {
+    const width = t.thead ? t.thead.length : 2;
+    t.table.forEach((row) => assert.equal(row.length, width, `${t.id}: a row has ${row.length} cells, not ${width}`));
+  }
+  assert.ok(every.some((t) => t.thead), 'no grid table was dealt');
+});
+
+test('savers, turning points, growth rates, and cleanup: the thin spots have practice', () => {
+  const text = (t) => [t.text, t.options && t.options[t.answer] && t.options[t.answer].label, t.why].join(' ');
+  const count = (re, kinds) => every.filter((t) => (!kinds || kinds.test(t.kind)) && re.test(text(t))).length;
+  // a saver is a lender, and the bank that owes the saver is the borrower
+  const keyOf = (kindId, re) => { const t = every.find((x) => x.kind === kindId && re.test(x.text)); return t.options[t.answer].label; };
+  assert.equal(keyOf('deflation', /saver with a fixed-rate savings account/), 'Gains');
+  assert.equal(keyOf('deflation', /owes its savers/), 'Loses');
+  assert.equal(keyOf('effect', /owes its savers/), 'Gains'); // the same bank, when prices rise instead
+  assert.ok(count(/saver/i, /^(deflation|ap-costs|tf-costs)$/) >= 5, 'savers under deflation');
+  // the gap at a turning point, in words
+  assert.ok(count(/trough|lowest point|bottom of the business cycle/i, /^(m-gapword|ap-cycle|tf-cycle)$/) >= 8, 'the gap at a trough');
+  // the price level from nominal and real growth
+  assert.ok(every.filter((t) => t.kind === 'apn-pricegrowth').length >= 6);
+  // paid cleanup counts, free goods do not
+  assert.ok(count(/clean|repair|rebuild/i, /^(counted|line|ap-miss|tf-miss|miss|blank-miss)$/) >= 8, 'cleanup and repairs');
+  assert.ok(count(/free (apps|map app|online)/i, /^(ap-miss|tf-miss)$/) >= 2, 'free digital goods');
+  // the CPI from a whole basket, as a table and as an AP style question
+  assert.ok(every.filter((t) => t.kind === 'm-basket').length >= 8 && every.filter((t) => t.kind === 'apn-basket').length >= 6);
 });
 
 /* ---------- the calculator ---------- */
@@ -954,9 +999,11 @@ test('AP style with numbers: every key is worked out again here, and the choices
     gap: ([actual, potential]) => 100 * (actual - potential) / potential,
     cyclical: ([actual, natural]) => actual - natural,
     realwage: ([wage, cpi]) => 100 * wage / cpi,
+    pricegrowth: ([nominal, real]) => nominal - real,
+    basket: ([slices, s1, s2, rides, r1, r2]) => { const before = slices * s1 + rides * r1, after = slices * s2 + rides * r2; return 100 * (after - before) / before; },
   };
   const list = every.filter((t) => t.kind.startsWith('apn-'));
-  assert.ok(list.length >= 60, 'only ' + list.length);
+  assert.ok(list.length >= 80, 'only ' + list.length);
   const kinds = new Set();
   for (const t of list) {
     const f = again[t.apn.k];

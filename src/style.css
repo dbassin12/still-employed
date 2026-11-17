@@ -235,6 +235,11 @@ body.answered kbd, body.answered .bl-help, body.answered .wall-help { display: n
 .data th { text-align: left; font-weight: 400; font-size: 1.08rem; padding: .15rem .6rem .15rem 0; }
 .data td { text-align: right; font-family: var(--slab); font-size: 1.22rem; padding: .15rem 0; white-space: nowrap; }
 .data tr + tr th, .data tr + tr td { border-top: 1px dashed rgba(21, 21, 58, .4); }
+/* a grid has a heading row and more than one number column (the CPI basket table) */
+.data.grid thead th { font-size: .9rem; font-weight: 700; text-align: right; padding: 0 0 .2rem .8rem; border-bottom: 2px solid var(--ink); white-space: nowrap; }
+.data.grid thead th:first-child { text-align: left; padding-left: 0; }
+.data.grid tbody th { font-size: 1.02rem; }
+.data.grid td { font-size: 1.14rem; padding-left: .8rem; }
 .cheat { margin-top: .4rem; padding-top: .3rem; border-top: 2px solid var(--ink); font-weight: 700; font-size: .95rem; }
 
 /* build the fraction */

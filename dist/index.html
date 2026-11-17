@@ -246,6 +246,11 @@ body.answered kbd, body.answered .bl-help, body.answered .wall-help { display: n
 .data th { text-align: left; font-weight: 400; font-size: 1.08rem; padding: .15rem .6rem .15rem 0; }
 .data td { text-align: right; font-family: var(--slab); font-size: 1.22rem; padding: .15rem 0; white-space: nowrap; }
 .data tr + tr th, .data tr + tr td { border-top: 1px dashed rgba(21, 21, 58, .4); }
+/* a grid has a heading row and more than one number column (the CPI basket table) */
+.data.grid thead th { font-size: .9rem; font-weight: 700; text-align: right; padding: 0 0 .2rem .8rem; border-bottom: 2px solid var(--ink); white-space: nowrap; }
+.data.grid thead th:first-child { text-align: left; padding-left: 0; }
+.data.grid tbody th { font-size: 1.02rem; }
+.data.grid td { font-size: 1.14rem; padding-left: .8rem; }
 .cheat { margin-top: .4rem; padding-top: .3rem; border-top: 2px solid var(--ink); font-weight: 700; font-size: .95rem; }
 
 /* build the fraction */
@@ -892,6 +897,9 @@ body.answered .keypad { display: none; }
       { k: 'foodhelp', t: 'A family gets food assistance benefits from the government.', s: 'Food assistance benefits', no: 'transfer', lvl: 1, y: 'A transfer. The government gives money and buys nothing.' },
       { k: 'coffee', t: 'A family buys coffee grown in Colombia.', s: 'Coffee grown in Colombia', no: 'abroad', lvl: 1, y: 'Made abroad. It counts in the GDP of the country that made it.' },
       { k: 'phonevn', t: 'You buy a new phone made in Vietnam.', s: 'A new phone made in Vietnam', no: 'abroad', lvl: 1, y: 'Made abroad. It counts in the GDP of the country that made it.' },
+      /* added Nov 17, 2026: paid cleanup and repairs count, even after something bad happens */
+      { k: 'floodcrew', t: 'The Village of Lawrence pays a crew to clean its streets after a flood.', s: 'A village paying a flood cleanup crew', line: 'G', lvl: 2, y: 'Government buying a service. Cleanup counts, even after a flood.' },
+      { k: 'stormtree', t: 'A family pays a tree service to clear a tree that fell in a storm.', s: 'Paid tree removal after a storm', line: 'C', lvl: 2, y: 'A household buying a service. The cleanup counts. The damage is never subtracted.' },
     ],
     FLOW: [
       { k: 'camp', t: 'A senior works a summer job at a camp.', a: 2, lvl: 1, y: 'Labor is a factor of production. It goes to the firm in the factor market.' },
@@ -1061,6 +1069,7 @@ body.answered .keypad { display: none; }
       { k: 'drawer', t: 'A teen keeping cash in a desk drawer.', s: 'A teen with cash in a drawer', key: 'loses', lvl: 1, y: 'Cash buys less as prices rise.' },
       { k: 'rentcpi', t: 'A landlord whose lease raises the rent by the CPI each year.', s: 'A landlord with rent tied to the CPI', key: 'protected', lvl: 2, y: 'The rent rises with prices, so its real value holds.' },
       { k: 'unioncola', t: 'A union member whose contract has a cost-of-living adjustment.', s: 'A union member with a COLA', key: 'protected', lvl: 1, y: 'Pay rises with prices.' },
+      { k: 'banksavers', t: 'A bank that owes its savers a fixed rate of interest.', s: 'A bank owing savers a fixed rate', key: 'gains', lvl: 3, y: 'Here the bank is the borrower. It repays savers in dollars that buy less.' },
     ],
     COSTS: [
       { k: 'pricelist', t: 'A bagel shop relabels its shelves each time flour costs rise.', key: 'menu', lvl: 1, y: 'Changing posted prices costs money. Menu costs.' },
@@ -1308,6 +1317,14 @@ body.answered .keypad { display: none; }
       ['cycle', 2, true, 'Potential real GDP grows over time with more workers, capital, and technology.', 'That is long-run growth.'],
       ['micro', 2, true, 'A minimum wage below the equilibrium wage has no effect.', 'A floor below equilibrium does not bind.'],
       ['micro', 1, false, 'Consumer surplus is the price you pay.', 'It is the most you would pay minus the price.'],
+      ['miss', 2, false, 'GDP counts the value people get from free apps and websites.', 'No price is paid, so GDP records nothing for that value.'],
+      ['miss', 2, true, 'Paying a crew to clean up a polluted river adds to GDP.', 'Cleanup is a paid service, so it counts. The damage is never subtracted.'],
+      ['real', 2, true, 'If nominal GDP grows faster than real GDP, the price level is rising.', 'Nominal growth is about real growth plus inflation.'],
+      ['real', 2, false, 'If nominal GDP rises 6% and real GDP rises 2%, prices fell about 4%.', 'Prices rose about 4%. Nominal growth is about real growth plus inflation.'],
+      ['cycle', 2, true, 'At a trough, real GDP is below potential real GDP.', 'The trough is the low point. That is a recessionary gap.'],
+      ['cycle', 2, false, 'At a trough, unemployment is below the natural rate.', 'It is above the natural rate. Real GDP is below potential at a trough.'],
+      ['costs', 3, true, 'Surprise deflation helps a saver with a fixed-rate bank account.', 'The saver is the lender here. The fixed interest buys more when prices fall.'],
+      ['costs', 3, false, 'When prices fall unexpectedly, a bank gains on the fixed rate it owes savers.', 'The bank is the borrower there. It repays in dollars worth more, so it loses.'],
     ],
 
     /* ---------- FILL THE BLANK: [desk, level, sentence, right, wrong, wrong, wrong, why] ---------- */
@@ -1665,6 +1682,20 @@ body.answered .keypad { display: none; }
       { d: 'micro', lvl: 1, q: 'A binding minimum wage creates', a: 'a surplus of labor', w: ['a shortage of labor', 'no change in employment', 'a lower wage for workers', 'more jobs than workers'], y: 'A floor above the equilibrium wage: more people want jobs than firms will hire.' },
       { d: 'micro', lvl: 2, q: 'The price of flour rises. In the market for bread,', a: 'supply shifts left, and the price rises', w: ['supply shifts right, and the price falls', 'demand shifts left, and the price falls', 'demand shifts right, and the price rises', 'neither curve shifts, and the price stays the same'], y: 'Flour is an input. A higher input cost cuts supply.' },
       { d: 'micro', lvl: 1, f: 'ppc', q: 'An economy is producing at a point inside its production possibilities curve. This means', a: 'some resources are not being used', w: ['the economy is growing quickly', 'the point cannot be reached today', 'every resource is fully employed', 'the curve has shifted inward'], y: 'Inside the curve, workers or plants sit idle.' },
+      /* added Nov 17, 2026 (evening): savers under deflation, prices read from two growth rates, the gap at a turning
+         point, and what GDP counts after something bad. Written fresh, with new numbers. */
+      { d: 'costs', lvl: 3, f: 'realrate', q: 'A saver puts money in a bank account that pays a fixed 2 percent. Prices then fall 3 percent over the year. What is the real return on the savings?', a: '5%', w: ['1%', '2%', '3%', '6%'], y: `2 ${M} (${M}3) = 5. Falling prices add to the real return.` },
+      { d: 'costs', lvl: 3, q: 'A saver has a bank account that pays a fixed rate of interest. Prices fall when nobody expected it. Who gains?', a: "The saver, at the bank's expense", w: ["The bank, at the saver's expense", 'Both the saver and the bank', 'Neither the saver nor the bank', 'The bank, and the saver is unaffected'], y: 'The saver is the lender here. The fixed interest buys more, and the bank has to pay it.' },
+      { d: 'costs', lvl: 3, q: 'Unexpected deflation would most likely hurt', a: 'a bank that owes savers a fixed rate', w: ['a bank that made fixed-rate car loans', 'a retiree living on a fixed pension', 'a worker holding cash for a large purchase', 'a landlord with a fixed-rent lease'], y: 'On its savings accounts the bank is the borrower. It repays in dollars worth more.' },
+      { d: 'real', lvl: 2, f: 'nomgrow', q: 'In a year when the price level rises, which of the following must be true?', a: 'Nominal GDP grows faster than real GDP.', w: ['Real GDP grows faster than nominal GDP.', 'Real GDP and nominal GDP grow at the same rate.', 'Nominal GDP falls while real GDP rises.', 'Real GDP falls while nominal GDP rises.'], y: 'Nominal growth is about real growth plus inflation, so nominal GDP grows faster.' },
+      { d: 'real', lvl: 3, f: 'deflator', q: 'In one year, nominal GDP rises from $200 billion to $231 billion, and real GDP rises from $200 billion to $210 billion. The price level', a: 'rose 10 percent', w: ['fell 10 percent', 'did not change', 'rose 5 percent', 'rose 15.5 percent'], y: `231 ÷ 210 × 100 = 110. The deflator went from 100 to 110.` },
+      { d: 'cycle', lvl: 2, f: 'gapsign', q: 'Real GDP has fallen for a year and has just hit its lowest point. Which of the following is most likely true?', a: 'Unemployment is above the natural rate.', w: ['Unemployment is below the natural rate.', 'Real GDP is above potential real GDP.', 'The output gap is positive and growing.', 'Real GDP has just begun to fall.'], y: 'That is the trough. Real GDP is below potential there, a recessionary gap.' },
+      { d: 'cycle', lvl: 2, f: 'gapsign', q: 'At which point in the business cycle is a recessionary gap most likely to be largest?', a: 'At the trough', w: ['At the peak', 'Halfway through an expansion', 'At the start of a contraction', 'Where real GDP equals potential real GDP'], y: 'Real GDP is farthest below potential at the trough.' },
+      { d: 'cycle', lvl: 2, f: 'gapsign', q: 'An economy is at the peak of its business cycle, with real GDP above potential real GDP. This economy has', a: 'an inflationary gap', w: ['a recessionary gap', 'no output gap', 'high cyclical unemployment', 'falling real GDP'], y: 'Above potential is a positive output gap. AP calls it an inflationary gap.' },
+      { d: 'miss', lvl: 2, f: 'misses', q: 'Which of the following adds to GDP even though it does not leave people better off than they were before?', a: 'Rebuilding homes after a hurricane', w: ['A parent staying home to raise children', 'A neighbor fixing your car as a favor', 'Using a free map app on your phone', 'Growing tomatoes for your own family'], y: 'Rebuilding is paid output, so it counts. The other four have no market price.' },
+      { d: 'miss', lvl: 2, f: 'misses', q: 'Millions of people use a free online encyclopedia. How does GDP treat the value those readers get from it?', a: 'It is left out, because no price is paid.', w: ['It is counted as consumption at its market value.', 'It is counted as investment by households.', 'It is counted as a government purchase.', 'It is subtracted, the way imports are.'], y: 'GDP adds up market sales. A free good has no price, so its value to users is missed.' },
+      { d: 'miss', lvl: 2, f: 'misses', q: 'A storm floods a town, and families pay contractors to repair their homes. What is the effect on GDP?', a: 'GDP rises, because repairs are paid output.', w: ['GDP falls, because the homes were damaged.', 'GDP does not change, because nothing new is made.', 'GDP falls by the value of the lost property.', 'GDP rises only if the homes are later sold.'], y: 'GDP counts the repair work. It never subtracts the damage.' },
+      { d: 'prices', lvl: 2, f: 'cpi', q: 'A basket holds bread, milk, and bus rides. From one year to the next, the price of bread falls while the prices of milk and bus rides rise. The CPI', a: 'rises if the basket costs more in total', w: ['must fall, because one price fell', 'must rise, because two prices rose', 'does not change, because the basket is fixed', 'rises only if every price rises'], y: 'The CPI follows the total cost of the fixed basket, not how many prices rose.' },
     ],
 
     /* ---------- FINISH THE SENTENCE: { d, lvl, t, b: [[right, wrong...], [right, wrong...]], y } ---------- */
@@ -2193,6 +2224,11 @@ body.answered .keypad { display: none; }
     { k: 'firmdebt', t: 'A firm that borrowed at a fixed rate from a bank.', key: 'loses', lvl: 3, y: 'A fixed-rate borrower loses when prices unexpectedly fall.' },
     { k: 'cash', t: 'Someone holding $2,000 in cash.', key: 'gains', lvl: 3, y: 'Cash buys more when prices fall.' },
     { k: 'gov', t: 'The government, which owes money on fixed-rate bonds.', key: 'loses', lvl: 3, y: 'It is a fixed-rate borrower. Surprise deflation hurts borrowers.' },
+    /* added Nov 17, 2026: a saver is a lender too, and the bank that owes the saver is the borrower */
+    { k: 'saver', t: 'A saver with a fixed-rate savings account at a bank.', key: 'gains', lvl: 3, y: 'The saver is the lender here. The fixed interest buys more when prices fall.' },
+    { k: 'paysavers', t: 'A bank that owes its savers a fixed rate of interest.', key: 'loses', lvl: 3, y: 'Here the bank is the borrower. It repays savers in dollars worth more.' },
+    { k: 'bondholder', t: 'Someone who owns a fixed-rate government bond.', key: 'gains', lvl: 3, y: 'A bondholder is a lender. The fixed payments buy more when prices fall.' },
+    { k: 'lease', t: 'A shop that signed a two-year lease at a fixed rent.', key: 'loses', lvl: 3, y: 'The rent is fixed while other prices fall, so it costs more in real terms.' },
   ];
   const LOANS = [[5, 2, 8], [6, 2, 5], [7, 3, 9], [4, 2, 2], [6, 3, 1], [8, 4, 4], [5, 3, 6], [7, 5, 3], [9, 4, 7], [5, 2, 0], [6, 4, 4], [10, 6, 9]];
   const COSTS = [
@@ -2333,7 +2369,7 @@ body.answered .keypad { display: none; }
     correct.why = correct.why.length > 80 ? 'Right.' : correct.why;
     const all = lowToHigh([correct].concat(wrongs));
     return finish({
-      id: o.id, desk: o.desk, verb: 'pick', lvl: o.lvl, order: o.order, ask: o.ask, text: o.text, table: o.table,
+      id: o.id, desk: o.desk, verb: 'pick', lvl: o.lvl, order: o.order, ask: o.ask, text: o.text, table: o.table, thead: o.thead,
       options: all, answer: all.indexOf(correct), why: o.why || o.work, work: o.work, formula: o.formula,
       calc: Object.assign({ f: o.calcF, in: o.calcIn, value: o.value, shown, fmt: Object.keys(fmt).find((k) => fmt[k] === f) }, o.calcExtra || {}),
     });
@@ -2358,6 +2394,8 @@ body.answered .keypad { display: none; }
     natural: 'Natural rate = frictional + structural',
     gap: 'Output gap % = (actual ' + MINUS + ' potential) ÷ potential × 100',
     realrate: 'Real interest rate = nominal rate ' + MINUS + ' inflation rate',
+    basketinfl: 'Cost of the basket = price × quantity, added up. Then (new ' + MINUS + ' old) ÷ old × 100',
+    basketcpi: 'Cost of the basket = price × quantity, added up. CPI = cost ÷ base-year cost × 100',
   };
 
   /* Number sets are written out, not random, so everyTask() can list and check every one. */
@@ -2987,7 +3025,8 @@ body.answered .keypad { display: none; }
   /* ================= test-style tables (added Nov 16, 2026) =================
      The other math tables in this game are clean. AP tables are not: they mix in taxes, depreciation, transfers,
      income items, or the whole population, and the student has to pick the right rows. These kinds drill that,
-     plus the words "recessionary gap" and "inflationary gap", plus inventories of goods made abroad.
+     plus the words "recessionary gap" and "inflationary gap", plus inventories of goods made abroad, plus (Nov 17)
+     the CPI worked out from a whole basket table.
      New numbers only. Never copy the teacher's test. Every kind here has drill: true, so Practice a topic can deal
      them as their own topic (DRILL), and the Solo deal leans on them a little. */
   const DRILL = { key: 'drill', code: 'Test tables', long: 'Messy tables and gaps' };
@@ -3076,6 +3115,10 @@ body.answered .keypad { display: none; }
     { k: 'gw10', lvl: 2, t: 'Cyclical unemployment is zero.', key: 'fullemp', y: 'No cyclical unemployment means full employment, at potential.' },
     { k: 'gw11', lvl: 3, t: 'Cyclical unemployment is negative.', key: 'infgap', y: 'Unemployment is below the natural rate, so real GDP is above potential.' },
     { k: 'gw12', lvl: 2, t: 'The economy is at a trough.', key: 'recgap', y: 'At a trough, real GDP is at its lowest point, below potential. Recessionary gap.' },
+    /* added Nov 17, 2026: the turning points, said the other ways a test says them */
+    { k: 'gw13', lvl: 2, t: 'Real GDP has hit the bottom of the business cycle.', key: 'recgap', y: 'The bottom is the trough. Real GDP is below potential there. Recessionary gap.' },
+    { k: 'gw14', lvl: 2, t: 'The economy is at a peak.', key: 'infgap', y: 'At a peak, real GDP is at its highest point, above potential. Inflationary gap.' },
+    { k: 'gw15', lvl: 3, t: 'A long contraction has just ended, and unemployment is at its highest.', key: 'recgap', y: 'That is the trough. Unemployment is above the natural rate, so real GDP is below potential.' },
   ];
   const STOCKS = [
     { k: 'st1', lvl: 2, t: 'A Lawrence store ends the year with more Italian-made sneakers on its shelves.', key: 'out', y: 'Investment goes up, but imports go up by the same amount. U.S. GDP does not change.' },
@@ -3085,6 +3128,48 @@ body.answered .keypad { display: none; }
     { k: 'st5', lvl: 2, t: 'A Long Island bike shop ends the year with more bikes made this year in Ohio.', key: 'in', y: 'New and made in the U.S. A rise in inventories counts as investment.' },
     { k: 'st6', lvl: 3, t: "A Cedarhurst toy store sells toys it had in stock since last year.", key: 'out', y: 'Made last year and counted then, as inventory. C goes up, inventories go down. No change.' },
   ];
+
+  /* A CPI basket as a full table (added Nov 17, 2026): three items, a quantity that never changes, and two years of
+     prices. The student costs the basket in each year, then finds the percent change (ask: 'change') or the Year 2
+     index (ask: 'index'). Each wrong number is a named mistake. New items and new numbers only. */
+  const BASKET_TABLES = [
+    { k: 'bk1', lvl: 2, ask: 'change', rows: [['Bagels', 10, 2, 3], ['Bus rides', 8, 2, 2], ['Haircuts', 1, 24, 26]] },
+    { k: 'bk2', lvl: 3, ask: 'change', rows: [['Notebooks', 10, 2, 3], ['Lunches', 6, 8, 9], ['Movie tickets', 2, 16, 13]] },
+    { k: 'bk3', lvl: 3, ask: 'change', rows: [['Gallons of gas', 20, 3, 2], ['Bananas', 10, 1, 1], ['T-shirts', 2, 15, 20]] },
+    { k: 'bk4', lvl: 2, ask: 'index', rows: [['Apples', 10, 1, 2], ['Sandwiches', 2, 10, 8], ['Bus passes', 1, 20, 24]] },
+    { k: 'bk5', lvl: 2, ask: 'index', rows: [['Gym visits', 10, 8, 10], ['Textbooks', 2, 40, 45], ['Phone plan', 1, 40, 40]] },
+    { k: 'bk6', lvl: 2, ask: 'change', rows: [['Pizza slices', 10, 2, 3], ['Juice bottles', 6, 2, 3], ['Concert tickets', 2, 24, 21]] },
+    { k: 'bk7', lvl: 3, ask: 'index', rows: [['Bread loaves', 10, 2, 3], ['Milk cartons', 10, 3, 2], ['Backpacks', 1, 70, 76]] },
+    { k: 'bk8', lvl: 3, ask: 'change', rows: [['Coffees', 10, 2, 3], ['Laundry loads', 2, 10, 10], ['Bus passes', 1, 10, 15]] },
+  ];
+  const BASKET_HEAD = ['Item', 'Quantity', 'Year 1', 'Year 2'];
+  GEN.baskettable = (o, r) => {
+    const q = o.rows.map((x) => x[1]), a = o.rows.map((x) => x[2]), b = o.rows.map((x) => x[3]);
+    const sum = (xs) => xs.reduce((s, x) => s + x, 0);
+    const old = sum(q.map((n, i) => n * a[i])), neu = sum(q.map((n, i) => n * b[i]));
+    const noQty = (sum(b) - sum(a)) / sum(a) * 100; // the prices added up with no quantities
+    const table = o.rows.map(([name, n, p1, p2]) => [name, fmt.num(n), fmt.usd(p1), fmt.usd(p2)]);
+    const costs = `Year 1: ${q.map((n, i) => n * a[i]).join(' + ')} = ${fmt.usd(old)}. Year 2: ${q.map((n, i) => n * b[i]).join(' + ')} = ${fmt.usd(neu)}.`;
+    const base = { r, desk: 'prices', lvl: o.lvl, table, thead: BASKET_HEAD, calcIn: { q, a, b } };
+    let t;
+    if (o.ask === 'index') {
+      const v = neu / old * 100;
+      t = numTask(Object.assign(base, {
+        order: 'CPI IN YEAR 2?', ask: 'Year 1 is the base year. Prices are for one of each item.', fmt: fmt.idx, value: v, calcF: 'basketindex', formula: F.basketcpi,
+        wrongs: [{ v: old / neu * 100, why: 'That is upside down. Put the Year 2 cost on top.' }, { v: (neu - old) / old * 100, why: 'That is the percent change. The index is 100 plus that.' }, { v: sum(b) / sum(a) * 100, why: 'That adds the prices and skips the quantities.' }, { v: 100 + (neu - old), why: 'That adds the dollar change to 100. Divide by the Year 1 cost.' }],
+        work: `${costs} ${fmt.num(neu)} ÷ ${fmt.num(old)} × 100 = ${fmt.idx(v)}`,
+      }));
+    } else {
+      const v = (neu - old) / old * 100;
+      t = numTask(Object.assign(base, {
+        order: 'HOW MUCH DID THE CPI CHANGE?', ask: 'The basket stays the same. Prices are for one of each item.', value: v, calcF: 'basketchange', formula: F.basketinfl,
+        wrongs: [{ v: (neu - old) / neu * 100, why: 'That divides by the Year 2 cost. Divide by the Year 1 cost.' }, { v: noQty, why: 'That adds the prices and skips the quantities.' }, { v: neu / old * 100, why: 'That is the new index. The change is the index minus 100.' }, { v: -v, why: 'Check the direction. Compare the Year 2 cost with Year 1.' }],
+        work: `${costs} (${fmt.num(neu)} ${MINUS} ${fmt.num(old)}) ÷ ${fmt.num(old)} × 100 = ${fmt.pct(v)}`,
+      }));
+    }
+    t.clock = Math.max(t.clock, 100); // six products, two sums, then a division: the longest math in the game
+    return t;
+  };
 
   const spendRows = (o, r) => {
     const nm = NAMES[o.n || 0];
@@ -3176,6 +3261,7 @@ body.answered .keypad { display: none; }
   kind('m-urate', 'jobs', 'pick', POP_JOBS, (o, r) => GEN.popurate(o, r), { drill: true });
   kind('m-lfpr', 'jobs', 'pick', POP_JOBS, (o, r) => GEN.poplfpr(o, r), { drill: true });
   kind('m-lfu', 'jobs', 'pick', POP_LF, (o, r) => GEN.lfurate(o, r), { drill: true });
+  kind('m-basket', 'prices', 'pick', BASKET_TABLES, (o, r) => GEN.baskettable(o, r), { drill: true });
   kind('m-gapcall', 'cycle', 'sort', GAP_CALLS, (o) => {
     const { urate, key } = gapCall(o);
     const u = o.lf - o.e;
@@ -3342,7 +3428,7 @@ body.answered .keypad { display: none; }
     const fit = (t, range) => t.lvl >= range[0] && t.lvl <= range[1];
     function candidates(rank) {
       const range = RANKS[rank].lvl;
-      return K.filter((k) => !skip.has(k.verb)).map((k) => {
+      return K.filter((k) => !skip.has(k.verb) && !skip.has(k.id)).map((k) => {
         const open = k.records.filter((rec, i) => !seen.has(`${k.id}:${(rec && rec.k) || i}`) && recordFits(k, rec, range));
         return { k, open };
       }).filter((c) => c.open.length);
@@ -4232,6 +4318,21 @@ body.answered .keypad { display: none; }
       v: ([w, c]) => w / c * 100,
       w: [([w, c]) => w * c / 100, ([w, c]) => w * (200 - c) / 100, ([w]) => w, ([w, c]) => w * (c - 100) / 100],
       y: ([w, c]) => `${w} ÷ ${c} × 100.` },
+    /* added Nov 17, 2026 (evening): the price level from two growth rates, and a whole basket worked in one question */
+    { k: 'pricegrowth', d: 'real', lvl: 2, f: 'nomgrow', show: pct1,
+      sets: [[5, 2], [6, 4], [4, 1], [3, 5], [9, 3], [8, 2]],
+      q: ([n, re]) => `Nominal GDP grows ${n} percent in a year, and real GDP grows ${re} percent. By about how much does the price level change?`,
+      v: ([n, re]) => n - re,
+      w: [([n, re]) => n + re, ([n, re]) => re - n, ([n]) => n, ([n, re]) => re],
+      y: ([n, re]) => `${n} ${B.MINUS} ${re}. Nominal growth is about real growth plus inflation.` },
+    // [slices, slice price in Year 1 and Year 2, rides, ride price in Year 1 and Year 2]
+    { k: 'basket', d: 'prices', lvl: 3, f: 'basketinfl', show: pct1,
+      sets: [[10, 3, 4, 5, 4, 4], [8, 2, 3, 4, 4, 4], [20, 4, 5, 5, 4, 3], [5, 4, 5, 10, 3, 3], [4, 5, 3, 10, 2, 2], [10, 4, 6, 5, 2, 2]],
+      q: ([q1, a1, b1, q2, a2, b2]) => `A basket holds ${q1} slices of pizza and ${q2} bus rides. A slice goes from $${a1} to $${b1}. ${a2 === b2 ? `A ride stays at $${a2}.` : `A ride goes from $${a2} to $${b2}.`} By what percent does the cost of the basket change?`,
+      v: ([q1, a1, b1, q2, a2, b2]) => (q1 * b1 + q2 * b2 - (q1 * a1 + q2 * a2)) / (q1 * a1 + q2 * a2) * 100,
+      w: [([q1, a1, b1, q2, a2, b2]) => (q1 * b1 + q2 * b2 - (q1 * a1 + q2 * a2)) / (q1 * b1 + q2 * b2) * 100, ([, a1, b1, , a2, b2]) => (b1 + b2 - (a1 + a2)) / (a1 + a2) * 100,
+        ([q1, a1, b1, q2, a2, b2]) => (q1 * b1 + q2 * b2) / (q1 * a1 + q2 * a2) * 100, ([, a1, b1]) => (b1 - a1) / a1 * 100],
+      y: ([q1, a1, b1, q2, a2, b2]) => { const o = q1 * a1 + q2 * a2, n = q1 * b1 + q2 * b2; return `The basket cost $${o}, then $${n}. (${n} ${B.MINUS} ${o}) ÷ ${o} × 100. Count each price by its quantity.`; } },
   ];
   APN.forEach((tp) => {
     kind('apn-' + tp.k, tp.d, 'ap', tp.sets.map((set, i) => ({ k: 's' + i, lvl: tp.lvl, set })), (rec) => {
@@ -4275,6 +4376,7 @@ body.answered .keypad { display: none; }
     convert: F.convert,
     realrate: F.realrate,
     surprise: `Real rate = nominal rate ${MN} inflation. Surprise inflation lowers it, so fixed-rate borrowers gain.`,
+    surprisedefl: `Real rate = nominal rate ${MN} inflation. Surprise deflation raises it, so lenders and savers gain.`,
     realvalue: 'Real value = nominal value ÷ price index × 100. Fixed dollars buy less when prices rise.',
     menushoe: 'Menu costs: the cost of changing prices. Shoe-leather costs: the cost of holding less cash.',
     realgdp: F.realgdp,
@@ -4310,7 +4412,7 @@ body.answered .keypad { display: none; }
     bias: 'bias', 'c-basket': 'basket', 'type-basket': 'basket', 'c-wagechange': 'wagechange', 'type-wagechange': 'wagechange',
     'cmp-wage': 'realwage', 'rank-wage': 'realwage', 'bad-wage': 'realwage', 'cmp-infl': 'infl', 'rank-infl': 'infl', 'rows-highinfl': 'infl', 'bad-infl': 'infl', 'arrows-prices': 'infl',
     'cmp-index': 'cpi', 'bars-base': 'cpi', 'bad-cpi': 'cpi', 'order-prices': 'cpi',
-    loan: 'surprise', 'cmp-rate': 'realrate', 'order-costs': 'surprise', 'arrows-costs': 'surprise', menu: 'menushoe', 'pile-costs': 'menushoe',
+    loan: 'surprise', deflation: 'surprisedefl', 'cmp-rate': 'realrate', 'order-costs': 'surprise', 'arrows-costs': 'surprise', menu: 'menushoe', 'pile-costs': 'menushoe',
     realnom: 'nomreal', 'pile-realnom': 'nomreal', 'odd-real': 'nomreal', 'match-real': 'nomreal', both: 'nomgrow', 'arrows-both': 'nomgrow', whichline: 'nomgrow',
     'c-onegood': 'nomreal', 'type-onegood': 'nomreal', basechart: 'baseyear', 'rows-baseyear': 'baseyear', 'rows-equal': 'baseyear',
     'rows-realfell': 'realgdp', 'cmp-real': 'realgdp', 'rank-real': 'realgdp', 'bad-real': 'realgdp', 'bad-def': 'deflator', 'order-real': 'growth',
@@ -4327,7 +4429,7 @@ body.answered .keypad { display: none; }
     miss: [[/population (rises|grows|grew)|grows faster than/i, 'percapgrow'], [/leisure|free time|traffic|hours a week|unpaid|nonmarket|underground|in cash|pollut|environment|forest|quality|divided|richest/i, 'misses'], [/per capita|per person|population/i, 'percap'], [/./, 'misses']],
     jobs: [[/participation|LFPR/i, 'lfpr'], [/frictional|structural|natural rate|full employment/i, 'natural'], [/cyclical/i, 'cyclical'], [/unemployment rate/i, 'urate'], [/./, 'lf']],
     prices: [[/real wage|buying power|buys (more|less)|purchasing/i, 'realwage'], [/disinflation|deflation|falls but stays|price level falls|still rose|more slowly/i, 'naming'], [/substitut|new goods|quality|overstate|fixed basket/i, 'bias'], [/basket|price index|base year|\bCPI is\b|index of/i, 'cpi'], [/./, 'infl']],
-    costs: [[/menu|shoe/i, 'menushoe'], [/real (interest )?rate|nominal (interest )?rate|interest rates?|real return/i, 'realrate'], [/loan|lend|borrow|mortgage|bank|bond|fixed-rate|fixed rate/i, 'surprise'], [/./, 'realvalue']],
+    costs: [[/menu|shoe/i, 'menushoe'], [/real (interest )?rate|nominal (interest )?rate|interest rates?|real return/i, 'realrate'], [/deflation|prices (then )?f(a|e)ll|falling prices/i, 'surprisedefl'], [/loan|lend|borrow|mortgage|bank|bond|fixed-rate|fixed rate/i, 'surprise'], [/./, 'realvalue']],
     real: [[/in the base year|base year.*(equal|100)/i, 'baseyear'], [/base-year prices|current prices/i, 'nomreal'], [/deflator/i, 'deflator'], [/grow|growth|rose|fell|rises|falls/i, 'nomgrow'], [/./, 'nomreal']],
     cycle: [[/PPC|production possibilities/i, 'ppc'], [/cyclical unemployment/i, 'cyclical'], [/gap|potential|natural rate|full employment/i, 'gapsign'], [/./, 'phases']],
     micro: [[/production possibilities|PPC/i, 'ppc'], [/consumer surplus|total surplus|would pay/i, 'csurplus'], [/tariff|quota|import/i, 'tariff'], [/deadweight|quantity sold/i, 'dwl'], [/tax/i, 'taxburden'], [/elastic|substitute|necessit|total revenue/i, 'elastic'], [/shifts? (right|left)|demand (rises|falls)|supply (rises|falls)/i, 'shifts'], [/./, 'shortage']],
@@ -4339,7 +4441,7 @@ body.answered .keypad { display: none; }
     ['miss', ['percap', 'percapgrow', 'misses']],
     ['jobs', ['lf', 'urate', 'lfpr', 'natural', 'cyclical']],
     ['prices', ['cpi', 'infl', 'naming', 'realwage', 'wagechange', 'convert', 'bias']],
-    ['costs', ['realrate', 'surprise', 'realvalue', 'menushoe']],
+    ['costs', ['realrate', 'surprise', 'surprisedefl', 'realvalue', 'menushoe']],
     ['real', ['nomreal', 'realgdp', 'deflator', 'nomgrow', 'growth', 'baseyear']],
     ['cycle', ['phases', 'gapdollar', 'gap', 'gapsign', 'potential', 'ppc']],
     ['micro', ['shortage', 'csurplus', 'elastic', 'taxburden', 'dwl', 'tariff', 'shifts']],
@@ -5607,7 +5709,12 @@ body.answered .keypad { display: none; }
   const optBtn = (i, label, extra, cls) => `<button type="button" class="opt ${cls || ''}" data-act="pick" data-i="${i}" data-key="${i + 1}"><kbd>${i + 1}</kbd><span class="opt-text"><span class="opt-label">${esc(label)}</span>${extra || ''}</span></button>`;
   const defLine = (o, opts) => (opts.hints && o.def ? `<small class="opt-def">${esc(o.def)}</small>` : '');
   const formHTML = (inner, cls) => `<article class="form ${cls || ''}"><span class="punch" aria-hidden="true"></span>${inner}<span class="stamp-spot" id="stamp-spot"></span></article>`;
-  const tableHTML = (t) => (t.table && t.table.length ? `<table class="data${t.table.length > 4 ? ' many' : ''}"><tbody>${t.table.map((r) => `<tr><th scope="row">${esc(r[0])}</th><td>${esc(r[1])}</td></tr>`).join('')}</tbody></table>` : '');
+  // A table is rows of [label, value]. With t.thead it is a grid: a heading row, then [label, value, value, ...].
+  const tableHTML = (t) => {
+    if (!t.table || !t.table.length) return '';
+    if (t.thead) return `<table class="data grid"><thead><tr>${t.thead.map((h) => `<th scope="col">${esc(h)}</th>`).join('')}</tr></thead><tbody>${t.table.map((r) => `<tr><th scope="row">${esc(r[0])}</th>${r.slice(1).map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    return `<table class="data${t.table.length > 4 ? ' many' : ''}"><tbody>${t.table.map((r) => `<tr><th scope="row">${esc(r[0])}</th><td>${esc(r[1])}</td></tr>`).join('')}</tbody></table>`;
+  };
   const formulaHTML = (t, o) => (o.formula && t.formula ? `<p class="cheat">${esc(t.formula)}</p>` : '');
 
   const VIEW = {
@@ -6925,7 +7032,7 @@ body.answered .keypad { display: none; }
   const FINAL_PAY = 500;
   const STEAL_MS = 8000;
   const CUP_KEY = 'still-employed:cup';
-  const CUP_SKIP = ['ap', 'badcell']; // too long for one player's turn on the big screen
+  const CUP_SKIP = ['ap', 'badcell', 'm-basket']; // too long for one player's turn on the big screen
   const saveCup = () => { const c = S.cup; if (!c) return; const copy = Object.assign({}, c); delete copy.r; delete copy.sch; delete copy.task; delete copy.finalSteps; store.set(CUP_KEY, JSON.stringify(copy)); };
   const loadCup = () => { try { const c = JSON.parse(store.get(CUP_KEY) || 'null'); return c && c.towns && c.phase !== 'over' ? c : null; } catch (e) { return null; } };
   const clearCup = () => store.set(CUP_KEY, 'null');

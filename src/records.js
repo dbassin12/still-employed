@@ -72,6 +72,9 @@
       { k: 'foodhelp', t: 'A family gets food assistance benefits from the government.', s: 'Food assistance benefits', no: 'transfer', lvl: 1, y: 'A transfer. The government gives money and buys nothing.' },
       { k: 'coffee', t: 'A family buys coffee grown in Colombia.', s: 'Coffee grown in Colombia', no: 'abroad', lvl: 1, y: 'Made abroad. It counts in the GDP of the country that made it.' },
       { k: 'phonevn', t: 'You buy a new phone made in Vietnam.', s: 'A new phone made in Vietnam', no: 'abroad', lvl: 1, y: 'Made abroad. It counts in the GDP of the country that made it.' },
+      /* added Nov 17, 2026: paid cleanup and repairs count, even after something bad happens */
+      { k: 'floodcrew', t: 'The Village of Lawrence pays a crew to clean its streets after a flood.', s: 'A village paying a flood cleanup crew', line: 'G', lvl: 2, y: 'Government buying a service. Cleanup counts, even after a flood.' },
+      { k: 'stormtree', t: 'A family pays a tree service to clear a tree that fell in a storm.', s: 'Paid tree removal after a storm', line: 'C', lvl: 2, y: 'A household buying a service. The cleanup counts. The damage is never subtracted.' },
     ],
     FLOW: [
       { k: 'camp', t: 'A senior works a summer job at a camp.', a: 2, lvl: 1, y: 'Labor is a factor of production. It goes to the firm in the factor market.' },
@@ -241,6 +244,7 @@
       { k: 'drawer', t: 'A teen keeping cash in a desk drawer.', s: 'A teen with cash in a drawer', key: 'loses', lvl: 1, y: 'Cash buys less as prices rise.' },
       { k: 'rentcpi', t: 'A landlord whose lease raises the rent by the CPI each year.', s: 'A landlord with rent tied to the CPI', key: 'protected', lvl: 2, y: 'The rent rises with prices, so its real value holds.' },
       { k: 'unioncola', t: 'A union member whose contract has a cost-of-living adjustment.', s: 'A union member with a COLA', key: 'protected', lvl: 1, y: 'Pay rises with prices.' },
+      { k: 'banksavers', t: 'A bank that owes its savers a fixed rate of interest.', s: 'A bank owing savers a fixed rate', key: 'gains', lvl: 3, y: 'Here the bank is the borrower. It repays savers in dollars that buy less.' },
     ],
     COSTS: [
       { k: 'pricelist', t: 'A bagel shop relabels its shelves each time flour costs rise.', key: 'menu', lvl: 1, y: 'Changing posted prices costs money. Menu costs.' },
@@ -488,6 +492,14 @@
       ['cycle', 2, true, 'Potential real GDP grows over time with more workers, capital, and technology.', 'That is long-run growth.'],
       ['micro', 2, true, 'A minimum wage below the equilibrium wage has no effect.', 'A floor below equilibrium does not bind.'],
       ['micro', 1, false, 'Consumer surplus is the price you pay.', 'It is the most you would pay minus the price.'],
+      ['miss', 2, false, 'GDP counts the value people get from free apps and websites.', 'No price is paid, so GDP records nothing for that value.'],
+      ['miss', 2, true, 'Paying a crew to clean up a polluted river adds to GDP.', 'Cleanup is a paid service, so it counts. The damage is never subtracted.'],
+      ['real', 2, true, 'If nominal GDP grows faster than real GDP, the price level is rising.', 'Nominal growth is about real growth plus inflation.'],
+      ['real', 2, false, 'If nominal GDP rises 6% and real GDP rises 2%, prices fell about 4%.', 'Prices rose about 4%. Nominal growth is about real growth plus inflation.'],
+      ['cycle', 2, true, 'At a trough, real GDP is below potential real GDP.', 'The trough is the low point. That is a recessionary gap.'],
+      ['cycle', 2, false, 'At a trough, unemployment is below the natural rate.', 'It is above the natural rate. Real GDP is below potential at a trough.'],
+      ['costs', 3, true, 'Surprise deflation helps a saver with a fixed-rate bank account.', 'The saver is the lender here. The fixed interest buys more when prices fall.'],
+      ['costs', 3, false, 'When prices fall unexpectedly, a bank gains on the fixed rate it owes savers.', 'The bank is the borrower there. It repays in dollars worth more, so it loses.'],
     ],
 
     /* ---------- FILL THE BLANK: [desk, level, sentence, right, wrong, wrong, wrong, why] ---------- */
@@ -845,6 +857,20 @@
       { d: 'micro', lvl: 1, q: 'A binding minimum wage creates', a: 'a surplus of labor', w: ['a shortage of labor', 'no change in employment', 'a lower wage for workers', 'more jobs than workers'], y: 'A floor above the equilibrium wage: more people want jobs than firms will hire.' },
       { d: 'micro', lvl: 2, q: 'The price of flour rises. In the market for bread,', a: 'supply shifts left, and the price rises', w: ['supply shifts right, and the price falls', 'demand shifts left, and the price falls', 'demand shifts right, and the price rises', 'neither curve shifts, and the price stays the same'], y: 'Flour is an input. A higher input cost cuts supply.' },
       { d: 'micro', lvl: 1, f: 'ppc', q: 'An economy is producing at a point inside its production possibilities curve. This means', a: 'some resources are not being used', w: ['the economy is growing quickly', 'the point cannot be reached today', 'every resource is fully employed', 'the curve has shifted inward'], y: 'Inside the curve, workers or plants sit idle.' },
+      /* added Nov 17, 2026 (evening): savers under deflation, prices read from two growth rates, the gap at a turning
+         point, and what GDP counts after something bad. Written fresh, with new numbers. */
+      { d: 'costs', lvl: 3, f: 'realrate', q: 'A saver puts money in a bank account that pays a fixed 2 percent. Prices then fall 3 percent over the year. What is the real return on the savings?', a: '5%', w: ['1%', '2%', '3%', '6%'], y: `2 ${M} (${M}3) = 5. Falling prices add to the real return.` },
+      { d: 'costs', lvl: 3, q: 'A saver has a bank account that pays a fixed rate of interest. Prices fall when nobody expected it. Who gains?', a: "The saver, at the bank's expense", w: ["The bank, at the saver's expense", 'Both the saver and the bank', 'Neither the saver nor the bank', 'The bank, and the saver is unaffected'], y: 'The saver is the lender here. The fixed interest buys more, and the bank has to pay it.' },
+      { d: 'costs', lvl: 3, q: 'Unexpected deflation would most likely hurt', a: 'a bank that owes savers a fixed rate', w: ['a bank that made fixed-rate car loans', 'a retiree living on a fixed pension', 'a worker holding cash for a large purchase', 'a landlord with a fixed-rent lease'], y: 'On its savings accounts the bank is the borrower. It repays in dollars worth more.' },
+      { d: 'real', lvl: 2, f: 'nomgrow', q: 'In a year when the price level rises, which of the following must be true?', a: 'Nominal GDP grows faster than real GDP.', w: ['Real GDP grows faster than nominal GDP.', 'Real GDP and nominal GDP grow at the same rate.', 'Nominal GDP falls while real GDP rises.', 'Real GDP falls while nominal GDP rises.'], y: 'Nominal growth is about real growth plus inflation, so nominal GDP grows faster.' },
+      { d: 'real', lvl: 3, f: 'deflator', q: 'In one year, nominal GDP rises from $200 billion to $231 billion, and real GDP rises from $200 billion to $210 billion. The price level', a: 'rose 10 percent', w: ['fell 10 percent', 'did not change', 'rose 5 percent', 'rose 15.5 percent'], y: `231 ÷ 210 × 100 = 110. The deflator went from 100 to 110.` },
+      { d: 'cycle', lvl: 2, f: 'gapsign', q: 'Real GDP has fallen for a year and has just hit its lowest point. Which of the following is most likely true?', a: 'Unemployment is above the natural rate.', w: ['Unemployment is below the natural rate.', 'Real GDP is above potential real GDP.', 'The output gap is positive and growing.', 'Real GDP has just begun to fall.'], y: 'That is the trough. Real GDP is below potential there, a recessionary gap.' },
+      { d: 'cycle', lvl: 2, f: 'gapsign', q: 'At which point in the business cycle is a recessionary gap most likely to be largest?', a: 'At the trough', w: ['At the peak', 'Halfway through an expansion', 'At the start of a contraction', 'Where real GDP equals potential real GDP'], y: 'Real GDP is farthest below potential at the trough.' },
+      { d: 'cycle', lvl: 2, f: 'gapsign', q: 'An economy is at the peak of its business cycle, with real GDP above potential real GDP. This economy has', a: 'an inflationary gap', w: ['a recessionary gap', 'no output gap', 'high cyclical unemployment', 'falling real GDP'], y: 'Above potential is a positive output gap. AP calls it an inflationary gap.' },
+      { d: 'miss', lvl: 2, f: 'misses', q: 'Which of the following adds to GDP even though it does not leave people better off than they were before?', a: 'Rebuilding homes after a hurricane', w: ['A parent staying home to raise children', 'A neighbor fixing your car as a favor', 'Using a free map app on your phone', 'Growing tomatoes for your own family'], y: 'Rebuilding is paid output, so it counts. The other four have no market price.' },
+      { d: 'miss', lvl: 2, f: 'misses', q: 'Millions of people use a free online encyclopedia. How does GDP treat the value those readers get from it?', a: 'It is left out, because no price is paid.', w: ['It is counted as consumption at its market value.', 'It is counted as investment by households.', 'It is counted as a government purchase.', 'It is subtracted, the way imports are.'], y: 'GDP adds up market sales. A free good has no price, so its value to users is missed.' },
+      { d: 'miss', lvl: 2, f: 'misses', q: 'A storm floods a town, and families pay contractors to repair their homes. What is the effect on GDP?', a: 'GDP rises, because repairs are paid output.', w: ['GDP falls, because the homes were damaged.', 'GDP does not change, because nothing new is made.', 'GDP falls by the value of the lost property.', 'GDP rises only if the homes are later sold.'], y: 'GDP counts the repair work. It never subtracts the damage.' },
+      { d: 'prices', lvl: 2, f: 'cpi', q: 'A basket holds bread, milk, and bus rides. From one year to the next, the price of bread falls while the prices of milk and bus rides rise. The CPI', a: 'rises if the basket costs more in total', w: ['must fall, because one price fell', 'must rise, because two prices rose', 'does not change, because the basket is fixed', 'rises only if every price rises'], y: 'The CPI follows the total cost of the fixed basket, not how many prices rose.' },
     ],
 
     /* ---------- FINISH THE SENTENCE: { d, lvl, t, b: [[right, wrong...], [right, wrong...]], y } ---------- */
