@@ -6,7 +6,7 @@ and checks each screen for console errors, sideways scrolling, controls off the 
 em dashes, a missing do-this-now line, and more than one main button. It also checks the money math.
 
 Run python3 build.py first. Uses the Playwright in ../open-outcry/.venv and installed Chrome:
-  ~/projects/open-outcry/.venv/bin/python tools/playtest.py [all|solo|class|cover|story|inputs|corners|shots|sound]
+  ~/projects/open-outcry/.venv/bin/python tools/playtest.py [all|solo|class|cover|story|inputs|calc|corners|shots|sound]
 Prints ALL CHECKS PASSED and exits 0 when clean. SE_SHOTS=folder puts screenshots somewhere else.
 """
 import os, re, shutil, sys
@@ -277,6 +277,17 @@ def play_solo_fired(b, size):
         want = round(so['pay'] / so['cpi'] * 100 / 10) * 10
         if abs(want - so['q']) > 10:
             problems.append(f'payday real pay wrong: {so}')
+        page.locator('#payq .calcbtn').click()
+        for ch in f'{so["pay"]}/{so["cpi"]}*100': page.keyboard.press(ch)
+        page.keyboard.press('Enter')
+        shown = page.evaluate("() => document.querySelector('#calc-out').textContent.replace(/,/g, '')")
+        if abs(float(shown) - so['pay'] / so['cpi'] * 100) > 0.01:
+            problems.append(f'payday calculator shows {shown} for {so}')
+        shot(page, f'solo/{size}-payday-calc')
+        if page.evaluate("() => { const t = document.querySelector('#tray'); return !t.hidden && t.getBoundingClientRect().bottom < innerHeight - 2; }"):
+            problems.append(f'payday calculator {size}: the tray left the bottom of the screen')
+        check(page, f'payday calculator {size}', tray=True)
+        page.keyboard.press('Escape')
         page.evaluate('window.__se.unlock()')
         page.locator(f'[data-act="payq"][data-i="{so["a"]}"]').click()
         page.wait_for_timeout(250)
@@ -644,6 +655,55 @@ def story(b):
     page.evaluate('window.__se.answerWrong()'); snapc('task-missed-steal-open')
     page.evaluate('window.__se.unlock()'); page.locator('.town[data-i="2"]').click(); snapc('steal-tapped')
     ctx.close()
+
+
+def calculator(b, size):
+    """The calculator: real taps and keys, it keeps number keys away from the answers while open, and it fits."""
+    ctx, page = new_page(b, size, tag=f'calc-{size}')
+    tid = page.evaluate("() => window.__se.B.everyTask(5).find(t => t.verb === 'type').id")
+    page.evaluate('(id) => { const t = window.__se.B.everyTask(5).find(x => x.id === id); window.__se.tryTask(t); window.__se.unlock(); }', tid)
+    page.wait_for_timeout(250)
+    page.locator('.tk-head .calcbtn').click()
+    if page.evaluate("document.querySelector('#calc').hidden"):
+        problems.append(f'calculator {size}: the button did not open it')
+    out = lambda: page.evaluate("document.querySelector('#calc-out').textContent")
+    for k in ['(', '1', '6', '2', '\u2212', '1', '5', '0', ')', '\u00f7', '1', '5', '0', '\u00d7', '1', '0', '0', '=']:
+        page.locator(f'#calc [data-k="{k}"]').click()
+    if out() != '8':
+        problems.append(f'calculator {size}: (162 - 150) / 150 x 100 by taps shows {out()}, not 8')
+    page.locator('#calc [data-k="C"]').click()
+    for ch in '2+3*4': page.keyboard.press(ch)
+    page.keyboard.press('Enter')
+    if out() != '14':
+        problems.append(f'calculator {size}: 2+3*4 by keys shows {out()}, not 14')
+    for ch in '1/0': page.keyboard.press(ch)
+    page.keyboard.press('Enter')
+    if out() != 'Error':
+        problems.append(f'calculator {size}: 1/0 shows {out()}, not Error')
+    typed = lambda: page.evaluate("(document.querySelector('#typed') || {}).textContent || ''")
+    if typed():
+        problems.append(f'calculator {size}: number keys reached the task while the calculator was open: {typed()}')
+    check(page, f'calculator open {size}')
+    if page.evaluate("() => { const t = document.querySelector('#tray'); return !t.hidden && t.getBoundingClientRect().bottom < innerHeight - 2; }"):
+        problems.append(f'calculator {size}: the tray left the bottom of the screen')
+    shot(page, f'calc/{size}-open')
+    page.keyboard.press('Escape')
+    if not page.evaluate("document.querySelector('#calc').hidden"):
+        problems.append(f'calculator {size}: Escape did not close it')
+    page.keyboard.press('4')
+    if '4' not in typed():
+        problems.append(f'calculator {size}: after closing, number keys should type the answer again')
+    page.locator('.tk-head .calcbtn').click()
+    page.evaluate('window.__se.answerWrong()')
+    page.wait_for_timeout(250)
+    check(page, f'calculator open after a miss {size}')
+    shot(page, f'calc/{size}-after-miss')
+    page.evaluate('(id) => { const t = window.__se.B.everyTask(5).find(x => x.id === id); window.__se.tryTask(t); window.__se.unlock(); }', tid)
+    page.wait_for_timeout(250)
+    if not page.evaluate("document.querySelector('#calc').hidden"):
+        problems.append(f'calculator {size}: it should close on the next task')
+    ctx.close()
+    report.append(f'calculator {size}: taps, keys, Error, key guard, layout')
 
 
 def real_inputs(b, size):
@@ -1382,6 +1442,9 @@ def main():
         if MODE in ('all', 'inputs'):
             real_inputs(b, 'phone')
             real_inputs(b, 'laptop')
+        if MODE in ('all', 'calc'):
+            for size in ('phone', 'small', 'laptop', 'projector'):
+                calculator(b, size)
         if MODE in ('all', 'corners'):
             corners(b)
         if MODE in ('all', 'shots'):

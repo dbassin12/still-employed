@@ -485,6 +485,63 @@
     try { an.beginElement(); } catch (e) { /* older browsers just skip the token */ }
   }
 
+  /* ================= calculator ================= */
+  /* A four-function calculator with parentheses, like the one allowed on the AP exam. The math is B.calcEval.
+     While it is open, the keyboard types into it (digits, + - * / x, parentheses, Enter, Backspace, Escape),
+     so 1 to 9 and A to E cannot pick an answer by accident. It closes on each new screen but keeps its last line. */
+  const CALC_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2"/><path d="M8 6.5h8M8.5 11h1M12 11h0M15.5 11h0M8.5 14.5h0M12 14.5h0M15.5 14.5h0M8.5 18h0M12 18h0M15.5 18h0"/></svg>';
+  const calcBtn = () => `<button type="button" class="calcbtn" data-act="calc" aria-expanded="${Calc.open}" aria-controls="calc">${CALC_ICON}Calculator</button>`;
+  const Calc = { open: false, expr: '', prev: '', shown: '', done: false, err: false };
+  const CALC_OPS = ['+', B.MINUS, '×', '÷'];
+  function calcPretty(e) { return e.replace(/([+×÷])/g, ' $1 ').replace(/([0-9.)])−/g, '$1 − ').replace(/\s+/g, ' ').trim(); }
+  function calcPaint() {
+    const box = $('#calc'); if (!box) return;
+    box.hidden = !Calc.open;
+    document.body.classList.toggle('calc-open', Calc.open);
+    $$('[data-act="calc"]').forEach((b) => b.setAttribute('aria-expanded', String(Calc.open)));
+    const out = $('#calc-out'), prev = $('#calc-prev');
+    prev.textContent = Calc.done ? Calc.prev : '';
+    out.textContent = Calc.done ? Calc.shown : (calcPretty(Calc.expr) || '0');
+    out.classList.toggle('err', Calc.done && Calc.err);
+    out.scrollLeft = out.scrollWidth;
+  }
+  function calcToggle(open) { Calc.open = open === undefined ? !Calc.open : open; calcPaint(); }
+  function calcKey(k) {
+    let e = Calc.expr;
+    if (Calc.done && (/^[0-9.(]$/.test(k) || k === 'back')) { e = ''; }
+    if (Calc.done && Calc.err && CALC_OPS.includes(k)) e = '';
+    Calc.done = false; Calc.err = false;
+    const last = e.slice(-1), opens = (e.match(/\(/g) || []).length - (e.match(/\)/g) || []).length;
+    if (k === 'C') { e = ''; Calc.prev = ''; }
+    else if (k === 'back') e = e.slice(0, -1);
+    else if (k === '=') {
+      if (!e) return;
+      const full = e + ')'.repeat(Math.max(0, opens));
+      const v = B.calcEval(full);
+      Calc.prev = calcPretty(full) + ' =';
+      Calc.shown = B.calcShow(v);
+      Calc.err = v === null;
+      Calc.done = true;
+      e = v === null ? '' : String(Number(v.toPrecision(12))).replace('-', B.MINUS);
+    } else if (/^[0-9]$/.test(k)) { e += (last === ')' ? '×' : '') + k; }
+    else if (k === '.') {
+      const seg = e.split(/[+×÷−()]/).pop();
+      if (!seg.includes('.')) e += (last === ')' ? '×' : '') + (seg === '' ? '0.' : '.');
+    } else if (CALC_OPS.includes(k)) {
+      if (e === '' || last === '(') { if (k === B.MINUS) e += k; }
+      else if (CALC_OPS.includes(last)) {
+        if (k === B.MINUS && (last === '×' || last === '÷')) e += k;
+        else if (e.length > 1 && !CALC_OPS.includes(e.slice(-2, -1)) && e.slice(-2, -1) !== '(') e = e.slice(0, -1) + k;
+      } else e += k;
+    } else if (k === '(') { e += (/[0-9.)]/.test(last) ? '×' : '') + '('; }
+    else if (k === ')') { if (opens > 0 && /[0-9.)]/.test(last)) e += ')'; }
+    if (e.length > 60) return;
+    Calc.expr = e;
+    calcPaint();
+    Sound.play('key');
+  }
+  const CALC_KEYS = { '*': '×', x: '×', X: '×', '/': '÷', '-': B.MINUS, '=': '=', Enter: '=', Backspace: 'back', Delete: 'C', c: 'C', C: 'C', '(': '(', ')': ')', '+': '+', '.': '.' };
+
   /* ================= task runner ================= */
   const Run = { t: null, o: null, done: false, cb: null, slots: [], got: null };
 
@@ -495,6 +552,7 @@
     Run.t = t; Run.o = o || {}; Run.done = false; Run.cb = cb; Run.slots = []; Run.got = new Set();
     Run.seq = []; Run.sel = null; Run.matched = 0; Run.typed = ''; Run.arrows = []; Run.pileAt = 0; Run.whyOverride = null; Run.typedWhy = null; Run.frq = []; Run.li = 0; Run.labelWrong = null; Run.choice = undefined;
     S.screen = 'task';
+    calcToggle(false);
     wall(t.desk);
     const part = t.part ? `<p class="tk-part">${esc(t.title || '')}. ${esc(t.part)}</p>` : '';
     const bannerText = o.banner || (t.again ? 'Back on your desk. You missed this one earlier.' : '');
@@ -503,7 +561,7 @@
     const stop = o.stop ? `<button type="button" class="linkbtn tk-skip" data-act="${esc(o.stop)}">${esc(o.stopLabel || 'Stop')}</button>` : '';
     const skipReview = o.skipReview ? `<button type="button" class="linkbtn tk-skip" data-act="skipmiss">Skip this one</button>` : '';
     stage().innerHTML = `<section class="task v-${t.verb}" data-task="${esc(t.id || '')}">
-      <header class="tk-head"><span class="tk-tab">${esc(DESKS[t.desk].name)} desk</span>${part}${practice}
+      <header class="tk-head"><span class="tk-tab">${esc(DESKS[t.desk].name)} desk</span>${calcBtn()}${part}${practice}
         <h1 class="tk-order">${esc(t.order)}</h1>${t.ask ? `<p class="tk-ask">${esc(t.ask)}</p>` : ''}${skip}${stop}${skipReview}</header>
       ${t.table && (t.verb === 'sort') && !t.text ? '' : ''}
       ${VIEW[t.verb](t, Run.o)}
@@ -845,6 +903,7 @@
     Clock.hide();
     document.body.classList.remove('answered');
     S.screen = name;
+    calcToggle(false);
     wall(wallName);
     stage().innerHTML = html;
     stage().scrollTop = 0;
@@ -1138,7 +1197,7 @@
     setScreen('payday', 'promo', `<section class="sheet" id="payq">
       <h1 class="big">Payday</h1>
       <div class="payrow"><div><span>Your pay</span><b>${fmt.usd(so.pay)}</b></div><div><span>Your CPI</span><b>${so.cpi}</b></div></div>
-      <h2 class="q">What is your real pay? Get it right for a $250 bonus.</h2>
+      <h2 class="q">What is your real pay? Get it right for a $250 bonus.</h2>${calcBtn()}
       <p class="sheet-note">Rounded to the nearest $10.</p>
       <div class="nums">${q.options.map((o, i) => `<button type="button" class="opt" data-act="payq" data-i="${i}" data-key="${i + 1}"><kbd>${i + 1}</kbd><span class="opt-text"><span class="opt-label">${esc(o.label)}</span></span></button>`).join('')}</div>
       <div id="payq-v" aria-live="polite"></div>
@@ -1700,6 +1759,9 @@
     matchL(el) { matchTap('L', Number(el.dataset.i), el); },
     matchR(el) { matchTap('R', Number(el.dataset.i), el); },
     keypad(el) { typeKey(el.dataset.k); },
+    calc() { calcToggle(); Sound.play('tap'); },
+    'calc-key'(el) { calcKey(el.dataset.k); },
+    'calc-close'() { calcToggle(false); },
     'typed-go'() {
       const t = Run.t;
       if (Run.done || !/\d/.test(Run.typed)) return;
@@ -1873,7 +1935,7 @@
     }
     answer(xx);
   }
-  const NO_LOCK = new Set(['fix', 'close-modal', 'tools', 'town-tap', 'no-steal', 'tile', 'grab', 'unslot', 'orderpick', 'matchL', 'matchR', 'keypad', 'typed-go', 'dial-go', 'arrowset', 'arrows-go', 'pilebin', 'wavetap', 'frqpick', 'labelpick', 'toggle-town', 'set-rounds', 'toggle-music', 'toggle-sfx', 'mute']);
+  const NO_LOCK = new Set(['fix', 'close-modal', 'tools', 'town-tap', 'no-steal', 'tile', 'grab', 'unslot', 'orderpick', 'matchL', 'matchR', 'keypad', 'typed-go', 'dial-go', 'arrowset', 'arrows-go', 'pilebin', 'wavetap', 'frqpick', 'labelpick', 'toggle-town', 'set-rounds', 'toggle-music', 'toggle-sfx', 'mute', 'calc', 'calc-key', 'calc-close']);
   function clearCupIfOver() { if (S.cup && S.cup.phase === 'over') S.cup = null; }
 
   document.addEventListener('click', (e) => {
@@ -1899,6 +1961,11 @@
     if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName) && e.key !== 'Enter') return;
     if (e.target && e.target.id === 'dial' && e.key === 'Enter') { const go = $('.lockbtn'); if (go) { e.preventDefault(); go.click(); } return; }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (Calc.open) {
+      if (e.key === 'Escape') { e.preventDefault(); calcToggle(false); return; }
+      const k = /^[0-9]$/.test(e.key) ? e.key : CALC_KEYS[e.key];
+      if (k) { e.preventDefault(); calcKey(k); return; }
+    }
     if (e.key === 'm' || e.key === 'M') { e.preventDefault(); Sound.unlock(); toggleMute(); return; }
     const live = Run.t && S.screen === 'task' && !Run.done ? Run.t : null;
     if (live && live.verb === 'type') {
@@ -1925,7 +1992,7 @@
 
   /* ================= test hook, used only by tools/playtest.py ================= */
   window.__se = {
-    S, Run, B, sound: Sound,
+    S, Run, B, sound: Sound, calc: { key: (k) => calcKey(k), open: (v) => calcToggle(v), state: () => Object.assign({}, Calc), out: () => $('#calc-out').textContent },
     screen: () => S.screen,
     rightChoice() {
       const t = Run.t; if (!t) return null;

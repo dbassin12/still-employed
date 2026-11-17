@@ -10,6 +10,17 @@
   <header id="hud" class="hud" hidden></header>
   <div id="fuse" hidden><i></i><b aria-hidden="true"></b></div>
   <main id="stage"></main>
+  <div id="calc" role="dialog" aria-label="Calculator" hidden>
+    <div class="calc-top"><b>Calculator</b><button type="button" class="linkbtn calc-close" data-act="calc-close">Close</button></div>
+    <div class="calc-screen"><div class="calc-prev" id="calc-prev"></div><div class="calc-out" id="calc-out" aria-live="polite">0</div></div>
+    <div class="calc-keys">
+      <button type="button" class="keybtn op" data-act="calc-key" data-k="C" aria-label="Clear">C</button><button type="button" class="keybtn op" data-act="calc-key" data-k="back" aria-label="Erase one">&#9003;</button><button type="button" class="keybtn op" data-act="calc-key" data-k="(">(</button><button type="button" class="keybtn op" data-act="calc-key" data-k=")">)</button>
+      <button type="button" class="keybtn" data-act="calc-key" data-k="7">7</button><button type="button" class="keybtn" data-act="calc-key" data-k="8">8</button><button type="button" class="keybtn" data-act="calc-key" data-k="9">9</button><button type="button" class="keybtn op" data-act="calc-key" data-k="&#247;" aria-label="Divide">&#247;</button>
+      <button type="button" class="keybtn" data-act="calc-key" data-k="4">4</button><button type="button" class="keybtn" data-act="calc-key" data-k="5">5</button><button type="button" class="keybtn" data-act="calc-key" data-k="6">6</button><button type="button" class="keybtn op" data-act="calc-key" data-k="&#215;" aria-label="Times">&#215;</button>
+      <button type="button" class="keybtn" data-act="calc-key" data-k="1">1</button><button type="button" class="keybtn" data-act="calc-key" data-k="2">2</button><button type="button" class="keybtn" data-act="calc-key" data-k="3">3</button><button type="button" class="keybtn op" data-act="calc-key" data-k="&#8722;" aria-label="Minus">&#8722;</button>
+      <button type="button" class="keybtn" data-act="calc-key" data-k="0">0</button><button type="button" class="keybtn" data-act="calc-key" data-k=".">.</button><button type="button" class="keybtn op eq" data-act="calc-key" data-k="=">=</button><button type="button" class="keybtn op" data-act="calc-key" data-k="+" aria-label="Plus">+</button>
+    </div>
+  </div>
   <footer id="tray" hidden></footer>
 </div>
 <button type="button" id="mute" data-act="mute" aria-pressed="false" aria-label="Mute music and sound" hidden>

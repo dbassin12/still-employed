@@ -750,3 +750,33 @@ test('test-style tables share no more than two numbers with any table on the rea
     }
   }
 });
+
+/* ---------- the calculator ---------- */
+test('calculator: order of operations, parentheses, and the minus sign', () => {
+  const cases = [
+    ['600+140+210+(70−95)', 925], ['2+3×4', 14], ['(2+3)×4', 20], ['(162−150)÷150×100', 8],
+    ['−5+3', -2], ['5×−2', -10], ['3−−2', 5], ['1.5×4', 6], ['.5+.5', 1], ['36÷144×100', 25],
+    ['1,800÷120×100', 1500], ['10−4−3', 3], ['100÷5÷2', 10], ['((1+2))×3', 9], ['8 × ( 2 + 1 )', 24],
+  ];
+  for (const [e, want] of cases) assert.ok(Math.abs(B.calcEval(e) - want) < 1e-9, `${e} should be ${want}, got ${B.calcEval(e)}`);
+});
+test('calculator: anything it cannot read is an Error, never a guess', () => {
+  for (const e of ['', '1÷0', '5÷(2−2)', '2×', '×2', '((2)', '2)', '1..2', 'abc', '2^3', 'alert(1)', '1e5']) {
+    assert.equal(B.calcEval(e), null, `${e} should not compute`);
+  }
+  assert.equal(B.calcShow(null), 'Error');
+});
+test('calculator: answers read like a calculator screen', () => {
+  assert.equal(B.calcShow(0.1 + 0.2), '0.3');
+  assert.equal(B.calcShow(2 / 3), '0.6666666667');
+  assert.equal(B.calcShow(1234567.5), '1,234,567.5');
+  assert.equal(B.calcShow(-0.25), B.MINUS + '0.25');
+  assert.equal(B.calcShow(B.calcEval('2−2')), '0');
+  assert.ok(!/[—–]/.test(B.calcShow(-12345)));
+});
+test('calculator: payday real pay typed on the calculator matches the key', () => {
+  for (const [pay, cpi] of [[41000, 125], [12850, 110], [9600, 140], [27300, 130], [5000, 100]]) {
+    const typed = B.calcEval(`${pay}÷${cpi}×100`);
+    assert.equal(Math.round(typed / 10) * 10, B.realPayOf(pay, cpi), `${pay} at CPI ${cpi}`);
+  }
+});

@@ -692,6 +692,38 @@ body.answered .keypad { display: none; }
   *, *::before, *::after { animation-duration: .001s !important; animation-delay: 0s !important; transition-duration: .001s !important; transition-delay: 0s !important; }
 }
 
+/* ================= calculator: a four-function calculator, like the one allowed on the AP exam =================
+   Upright screens (phones): it sits between the task and the tray, so the task above still scrolls.
+   Wide screens (Chromebook, projector): it takes a column at the right. Either way it never covers the work. */
+.calcbtn { display: inline-flex; align-items: center; gap: .3rem; margin-left: .45rem; vertical-align: top; padding: .05rem .5rem; min-height: 1.45rem; font: 700 .78rem var(--body); color: var(--on-wall); background: rgba(0, 0, 0, .28); border: .1rem solid var(--on-wall-soft); border-radius: 3px; }
+.calcbtn svg { width: .95rem; height: .95rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.calcbtn[aria-expanded="true"] { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+.sheet .calcbtn { align-self: flex-start; margin: 0; font-size: .92rem; padding: .3rem .75rem; }
+#calc { flex: none; position: relative; z-index: 30; padding: .45rem max(16px, .9rem) .55rem; background: var(--bond); color: var(--ink); border-top: .2rem solid var(--ink); }
+.calc-top { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .25rem; }
+.calc-top b { font: 400 1rem var(--slab); }
+#calc .calc-close { color: var(--ink); font-weight: 700; padding: .25rem .2rem; }
+.calc-screen { background: var(--paper); border: .14rem solid var(--ink); border-radius: 3px; padding: .2rem .6rem .25rem; text-align: right; margin-bottom: .4rem; }
+.calc-prev { min-height: 1.1rem; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.calc-out { font: 400 1.6rem var(--slab); line-height: 1.25; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+.calc-out::-webkit-scrollbar { display: none; }
+.calc-out.err { color: var(--no); }
+.calc-keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: .28rem; }
+.calc-keys .keybtn { min-height: 2.3rem; }
+.calc-keys .op { font-family: var(--body); font-weight: 700; background: var(--paper); }
+.calc-keys .eq { background: var(--ink); color: var(--bond); }
+#calc .keybtn { order: 0; }
+@media (min-aspect-ratio: 11/10) {
+  /* wide screens: the calculator takes a column at the right and the task moves over, so it never covers the work */
+  body.calc-open #app { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+  body.calc-open #hud, body.calc-open #fuse, body.calc-open #tray { grid-column: 1 / -1; }
+  body.calc-open #hud { grid-row: 1; } body.calc-open #fuse { grid-row: 2; } body.calc-open #tray { grid-row: 4; }
+  body.calc-open #stage { grid-column: 1; grid-row: 3; }
+  #calc { grid-column: 2; grid-row: 3; width: 14.5rem; align-self: stretch; display: flex; flex-direction: column; justify-content: center; border-top: 0; border-left: .2rem solid var(--ink); padding: .6rem .7rem; overflow-y: auto; }
+  #calc[hidden] { display: none; }
+  .calc-keys .keybtn { min-height: 2.1rem; font-size: 1.1rem; }
+}
+
 </style>
 </head>
 <body data-wall="home">
@@ -699,6 +731,17 @@ body.answered .keypad { display: none; }
   <header id="hud" class="hud" hidden></header>
   <div id="fuse" hidden><i></i><b aria-hidden="true"></b></div>
   <main id="stage"></main>
+  <div id="calc" role="dialog" aria-label="Calculator" hidden>
+    <div class="calc-top"><b>Calculator</b><button type="button" class="linkbtn calc-close" data-act="calc-close">Close</button></div>
+    <div class="calc-screen"><div class="calc-prev" id="calc-prev"></div><div class="calc-out" id="calc-out" aria-live="polite">0</div></div>
+    <div class="calc-keys">
+      <button type="button" class="keybtn op" data-act="calc-key" data-k="C" aria-label="Clear">C</button><button type="button" class="keybtn op" data-act="calc-key" data-k="back" aria-label="Erase one">&#9003;</button><button type="button" class="keybtn op" data-act="calc-key" data-k="(">(</button><button type="button" class="keybtn op" data-act="calc-key" data-k=")">)</button>
+      <button type="button" class="keybtn" data-act="calc-key" data-k="7">7</button><button type="button" class="keybtn" data-act="calc-key" data-k="8">8</button><button type="button" class="keybtn" data-act="calc-key" data-k="9">9</button><button type="button" class="keybtn op" data-act="calc-key" data-k="&#247;" aria-label="Divide">&#247;</button>
+      <button type="button" class="keybtn" data-act="calc-key" data-k="4">4</button><button type="button" class="keybtn" data-act="calc-key" data-k="5">5</button><button type="button" class="keybtn" data-act="calc-key" data-k="6">6</button><button type="button" class="keybtn op" data-act="calc-key" data-k="&#215;" aria-label="Times">&#215;</button>
+      <button type="button" class="keybtn" data-act="calc-key" data-k="1">1</button><button type="button" class="keybtn" data-act="calc-key" data-k="2">2</button><button type="button" class="keybtn" data-act="calc-key" data-k="3">3</button><button type="button" class="keybtn op" data-act="calc-key" data-k="&#8722;" aria-label="Minus">&#8722;</button>
+      <button type="button" class="keybtn" data-act="calc-key" data-k="0">0</button><button type="button" class="keybtn" data-act="calc-key" data-k=".">.</button><button type="button" class="keybtn op eq" data-act="calc-key" data-k="=">=</button><button type="button" class="keybtn op" data-act="calc-key" data-k="+" aria-label="Plus">+</button>
+    </div>
+  </div>
   <footer id="tray" hidden></footer>
 </div>
 <button type="button" id="mute" data-act="mute" aria-pressed="false" aria-label="Mute music and sound" hidden>
@@ -3078,9 +3121,54 @@ body.answered .keypad { display: none; }
     const rec = k.records.find((x) => x.k === recKey);
     return buildFrom(k, rec, r, k.records.indexOf(rec));
   }
+  /* ================= the calculator's math (app.js draws the keys) =================
+     A four-function calculator with parentheses, like the one allowed on the AP exam.
+     Order of operations: × and ÷ before + and −. Returns null for anything it cannot read,
+     including dividing by zero. calcShow turns an answer into the words on the screen. */
+  function calcEval(src) {
+    const s = String(src == null ? '' : src).replace(/\s+/g, '').replace(/[−–]/g, '-').replace(/×/g, '*').replace(/÷/g, '/').replace(/,/g, '');
+    if (!s || /[^0-9.+\-*/()]/.test(s)) return null;
+    let i = 0, bad = false;
+    const factor = () => {
+      if (s[i] === '-') { i++; return -factor(); }
+      if (s[i] === '+') { i++; return factor(); }
+      if (s[i] === '(') { i++; const v = expr(); if (s[i] !== ')') { bad = true; return NaN; } i++; return v; }
+      const m = /^(\d+\.?\d*|\.\d+)/.exec(s.slice(i));
+      if (!m) { bad = true; return NaN; }
+      i += m[0].length;
+      return Number(m[0]);
+    };
+    const term = () => {
+      let v = factor();
+      while (s[i] === '*' || s[i] === '/') {
+        const op = s[i++], w = factor();
+        if (op === '/' && w === 0) bad = true;
+        v = op === '*' ? v * w : v / w;
+      }
+      return v;
+    };
+    function expr() {
+      let v = term();
+      while (s[i] === '+' || s[i] === '-') { const op = s[i++], w = term(); v = op === '+' ? v + w : v - w; }
+      return v;
+    }
+    const v = expr();
+    if (bad || i !== s.length || !Number.isFinite(v)) return null;
+    return Object.is(v, -0) ? 0 : v;
+  }
+  function calcShow(v) {
+    if (v === null || v === undefined || !Number.isFinite(v)) return 'Error';
+    const r = Number(v.toPrecision(10));
+    if (r === 0) return '0';
+    const a = Math.abs(r), neg = r < 0 ? MINUS : '';
+    if (a >= 1e15 || a < 1e-6) return neg + a.toExponential(4);
+    const [ip, fp] = a.toFixed(10).replace(/0+$/, '').replace(/\.$/, '').split('.');
+    return neg + ip.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (fp ? '.' + fp : '');
+  }
+
   const api = {
     DESKS, DRILL, VERBS, RANKS, BIN, ARROWS, KINDS: K, MINUS,
-    rng, shuffle, pickOne, fmt, wave, everyTask, boss, scheduler, payFor, streakMult, realPayOf, realPayQuestion, trainingTask, totalTasks, oneTask,
+    rng, shuffle, pickOne, fmt, wave, everyTask, boss, scheduler, payFor, streakMult, realPayOf, realPayQuestion, trainingTask, totalTasks, oneTask, calcEval, calcShow,
     _kit: { kind, finish, GEN, BUILD, SETS, bins, plain, VERB_CLOCK, VERB_PAY, VERB_WEIGHT, GDP, PEOPLE, EFFECTS, LOOP, REALNOM, COSTS, PHASES, NAMEIT, MICRO_ELASTIC, TYPES, MOVES, TOWNS, BOTHMOVES, PHIS, words },
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -5120,6 +5208,63 @@ body.answered .keypad { display: none; }
     try { an.beginElement(); } catch (e) { /* older browsers just skip the token */ }
   }
 
+  /* ================= calculator ================= */
+  /* A four-function calculator with parentheses, like the one allowed on the AP exam. The math is B.calcEval.
+     While it is open, the keyboard types into it (digits, + - * / x, parentheses, Enter, Backspace, Escape),
+     so 1 to 9 and A to E cannot pick an answer by accident. It closes on each new screen but keeps its last line. */
+  const CALC_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2"/><path d="M8 6.5h8M8.5 11h1M12 11h0M15.5 11h0M8.5 14.5h0M12 14.5h0M15.5 14.5h0M8.5 18h0M12 18h0M15.5 18h0"/></svg>';
+  const calcBtn = () => `<button type="button" class="calcbtn" data-act="calc" aria-expanded="${Calc.open}" aria-controls="calc">${CALC_ICON}Calculator</button>`;
+  const Calc = { open: false, expr: '', prev: '', shown: '', done: false, err: false };
+  const CALC_OPS = ['+', B.MINUS, '×', '÷'];
+  function calcPretty(e) { return e.replace(/([+×÷])/g, ' $1 ').replace(/([0-9.)])−/g, '$1 − ').replace(/\s+/g, ' ').trim(); }
+  function calcPaint() {
+    const box = $('#calc'); if (!box) return;
+    box.hidden = !Calc.open;
+    document.body.classList.toggle('calc-open', Calc.open);
+    $$('[data-act="calc"]').forEach((b) => b.setAttribute('aria-expanded', String(Calc.open)));
+    const out = $('#calc-out'), prev = $('#calc-prev');
+    prev.textContent = Calc.done ? Calc.prev : '';
+    out.textContent = Calc.done ? Calc.shown : (calcPretty(Calc.expr) || '0');
+    out.classList.toggle('err', Calc.done && Calc.err);
+    out.scrollLeft = out.scrollWidth;
+  }
+  function calcToggle(open) { Calc.open = open === undefined ? !Calc.open : open; calcPaint(); }
+  function calcKey(k) {
+    let e = Calc.expr;
+    if (Calc.done && (/^[0-9.(]$/.test(k) || k === 'back')) { e = ''; }
+    if (Calc.done && Calc.err && CALC_OPS.includes(k)) e = '';
+    Calc.done = false; Calc.err = false;
+    const last = e.slice(-1), opens = (e.match(/\(/g) || []).length - (e.match(/\)/g) || []).length;
+    if (k === 'C') { e = ''; Calc.prev = ''; }
+    else if (k === 'back') e = e.slice(0, -1);
+    else if (k === '=') {
+      if (!e) return;
+      const full = e + ')'.repeat(Math.max(0, opens));
+      const v = B.calcEval(full);
+      Calc.prev = calcPretty(full) + ' =';
+      Calc.shown = B.calcShow(v);
+      Calc.err = v === null;
+      Calc.done = true;
+      e = v === null ? '' : String(Number(v.toPrecision(12))).replace('-', B.MINUS);
+    } else if (/^[0-9]$/.test(k)) { e += (last === ')' ? '×' : '') + k; }
+    else if (k === '.') {
+      const seg = e.split(/[+×÷−()]/).pop();
+      if (!seg.includes('.')) e += (last === ')' ? '×' : '') + (seg === '' ? '0.' : '.');
+    } else if (CALC_OPS.includes(k)) {
+      if (e === '' || last === '(') { if (k === B.MINUS) e += k; }
+      else if (CALC_OPS.includes(last)) {
+        if (k === B.MINUS && (last === '×' || last === '÷')) e += k;
+        else if (e.length > 1 && !CALC_OPS.includes(e.slice(-2, -1)) && e.slice(-2, -1) !== '(') e = e.slice(0, -1) + k;
+      } else e += k;
+    } else if (k === '(') { e += (/[0-9.)]/.test(last) ? '×' : '') + '('; }
+    else if (k === ')') { if (opens > 0 && /[0-9.)]/.test(last)) e += ')'; }
+    if (e.length > 60) return;
+    Calc.expr = e;
+    calcPaint();
+    Sound.play('key');
+  }
+  const CALC_KEYS = { '*': '×', x: '×', X: '×', '/': '÷', '-': B.MINUS, '=': '=', Enter: '=', Backspace: 'back', Delete: 'C', c: 'C', C: 'C', '(': '(', ')': ')', '+': '+', '.': '.' };
+
   /* ================= task runner ================= */
   const Run = { t: null, o: null, done: false, cb: null, slots: [], got: null };
 
@@ -5130,6 +5275,7 @@ body.answered .keypad { display: none; }
     Run.t = t; Run.o = o || {}; Run.done = false; Run.cb = cb; Run.slots = []; Run.got = new Set();
     Run.seq = []; Run.sel = null; Run.matched = 0; Run.typed = ''; Run.arrows = []; Run.pileAt = 0; Run.whyOverride = null; Run.typedWhy = null; Run.frq = []; Run.li = 0; Run.labelWrong = null; Run.choice = undefined;
     S.screen = 'task';
+    calcToggle(false);
     wall(t.desk);
     const part = t.part ? `<p class="tk-part">${esc(t.title || '')}. ${esc(t.part)}</p>` : '';
     const bannerText = o.banner || (t.again ? 'Back on your desk. You missed this one earlier.' : '');
@@ -5138,7 +5284,7 @@ body.answered .keypad { display: none; }
     const stop = o.stop ? `<button type="button" class="linkbtn tk-skip" data-act="${esc(o.stop)}">${esc(o.stopLabel || 'Stop')}</button>` : '';
     const skipReview = o.skipReview ? `<button type="button" class="linkbtn tk-skip" data-act="skipmiss">Skip this one</button>` : '';
     stage().innerHTML = `<section class="task v-${t.verb}" data-task="${esc(t.id || '')}">
-      <header class="tk-head"><span class="tk-tab">${esc(DESKS[t.desk].name)} desk</span>${part}${practice}
+      <header class="tk-head"><span class="tk-tab">${esc(DESKS[t.desk].name)} desk</span>${calcBtn()}${part}${practice}
         <h1 class="tk-order">${esc(t.order)}</h1>${t.ask ? `<p class="tk-ask">${esc(t.ask)}</p>` : ''}${skip}${stop}${skipReview}</header>
       ${t.table && (t.verb === 'sort') && !t.text ? '' : ''}
       ${VIEW[t.verb](t, Run.o)}
@@ -5480,6 +5626,7 @@ body.answered .keypad { display: none; }
     Clock.hide();
     document.body.classList.remove('answered');
     S.screen = name;
+    calcToggle(false);
     wall(wallName);
     stage().innerHTML = html;
     stage().scrollTop = 0;
@@ -5773,7 +5920,7 @@ body.answered .keypad { display: none; }
     setScreen('payday', 'promo', `<section class="sheet" id="payq">
       <h1 class="big">Payday</h1>
       <div class="payrow"><div><span>Your pay</span><b>${fmt.usd(so.pay)}</b></div><div><span>Your CPI</span><b>${so.cpi}</b></div></div>
-      <h2 class="q">What is your real pay? Get it right for a $250 bonus.</h2>
+      <h2 class="q">What is your real pay? Get it right for a $250 bonus.</h2>${calcBtn()}
       <p class="sheet-note">Rounded to the nearest $10.</p>
       <div class="nums">${q.options.map((o, i) => `<button type="button" class="opt" data-act="payq" data-i="${i}" data-key="${i + 1}"><kbd>${i + 1}</kbd><span class="opt-text"><span class="opt-label">${esc(o.label)}</span></span></button>`).join('')}</div>
       <div id="payq-v" aria-live="polite"></div>
@@ -6335,6 +6482,9 @@ body.answered .keypad { display: none; }
     matchL(el) { matchTap('L', Number(el.dataset.i), el); },
     matchR(el) { matchTap('R', Number(el.dataset.i), el); },
     keypad(el) { typeKey(el.dataset.k); },
+    calc() { calcToggle(); Sound.play('tap'); },
+    'calc-key'(el) { calcKey(el.dataset.k); },
+    'calc-close'() { calcToggle(false); },
     'typed-go'() {
       const t = Run.t;
       if (Run.done || !/\d/.test(Run.typed)) return;
@@ -6508,7 +6658,7 @@ body.answered .keypad { display: none; }
     }
     answer(xx);
   }
-  const NO_LOCK = new Set(['fix', 'close-modal', 'tools', 'town-tap', 'no-steal', 'tile', 'grab', 'unslot', 'orderpick', 'matchL', 'matchR', 'keypad', 'typed-go', 'dial-go', 'arrowset', 'arrows-go', 'pilebin', 'wavetap', 'frqpick', 'labelpick', 'toggle-town', 'set-rounds', 'toggle-music', 'toggle-sfx', 'mute']);
+  const NO_LOCK = new Set(['fix', 'close-modal', 'tools', 'town-tap', 'no-steal', 'tile', 'grab', 'unslot', 'orderpick', 'matchL', 'matchR', 'keypad', 'typed-go', 'dial-go', 'arrowset', 'arrows-go', 'pilebin', 'wavetap', 'frqpick', 'labelpick', 'toggle-town', 'set-rounds', 'toggle-music', 'toggle-sfx', 'mute', 'calc', 'calc-key', 'calc-close']);
   function clearCupIfOver() { if (S.cup && S.cup.phase === 'over') S.cup = null; }
 
   document.addEventListener('click', (e) => {
@@ -6534,6 +6684,11 @@ body.answered .keypad { display: none; }
     if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName) && e.key !== 'Enter') return;
     if (e.target && e.target.id === 'dial' && e.key === 'Enter') { const go = $('.lockbtn'); if (go) { e.preventDefault(); go.click(); } return; }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (Calc.open) {
+      if (e.key === 'Escape') { e.preventDefault(); calcToggle(false); return; }
+      const k = /^[0-9]$/.test(e.key) ? e.key : CALC_KEYS[e.key];
+      if (k) { e.preventDefault(); calcKey(k); return; }
+    }
     if (e.key === 'm' || e.key === 'M') { e.preventDefault(); Sound.unlock(); toggleMute(); return; }
     const live = Run.t && S.screen === 'task' && !Run.done ? Run.t : null;
     if (live && live.verb === 'type') {
@@ -6560,7 +6715,7 @@ body.answered .keypad { display: none; }
 
   /* ================= test hook, used only by tools/playtest.py ================= */
   window.__se = {
-    S, Run, B, sound: Sound,
+    S, Run, B, sound: Sound, calc: { key: (k) => calcKey(k), open: (v) => calcToggle(v), state: () => Object.assign({}, Calc), out: () => $('#calc-out').textContent },
     screen: () => S.screen,
     rightChoice() {
       const t = Run.t; if (!t) return null;

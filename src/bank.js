@@ -1665,9 +1665,54 @@
     const rec = k.records.find((x) => x.k === recKey);
     return buildFrom(k, rec, r, k.records.indexOf(rec));
   }
+  /* ================= the calculator's math (app.js draws the keys) =================
+     A four-function calculator with parentheses, like the one allowed on the AP exam.
+     Order of operations: × and ÷ before + and −. Returns null for anything it cannot read,
+     including dividing by zero. calcShow turns an answer into the words on the screen. */
+  function calcEval(src) {
+    const s = String(src == null ? '' : src).replace(/\s+/g, '').replace(/[−–]/g, '-').replace(/×/g, '*').replace(/÷/g, '/').replace(/,/g, '');
+    if (!s || /[^0-9.+\-*/()]/.test(s)) return null;
+    let i = 0, bad = false;
+    const factor = () => {
+      if (s[i] === '-') { i++; return -factor(); }
+      if (s[i] === '+') { i++; return factor(); }
+      if (s[i] === '(') { i++; const v = expr(); if (s[i] !== ')') { bad = true; return NaN; } i++; return v; }
+      const m = /^(\d+\.?\d*|\.\d+)/.exec(s.slice(i));
+      if (!m) { bad = true; return NaN; }
+      i += m[0].length;
+      return Number(m[0]);
+    };
+    const term = () => {
+      let v = factor();
+      while (s[i] === '*' || s[i] === '/') {
+        const op = s[i++], w = factor();
+        if (op === '/' && w === 0) bad = true;
+        v = op === '*' ? v * w : v / w;
+      }
+      return v;
+    };
+    function expr() {
+      let v = term();
+      while (s[i] === '+' || s[i] === '-') { const op = s[i++], w = term(); v = op === '+' ? v + w : v - w; }
+      return v;
+    }
+    const v = expr();
+    if (bad || i !== s.length || !Number.isFinite(v)) return null;
+    return Object.is(v, -0) ? 0 : v;
+  }
+  function calcShow(v) {
+    if (v === null || v === undefined || !Number.isFinite(v)) return 'Error';
+    const r = Number(v.toPrecision(10));
+    if (r === 0) return '0';
+    const a = Math.abs(r), neg = r < 0 ? MINUS : '';
+    if (a >= 1e15 || a < 1e-6) return neg + a.toExponential(4);
+    const [ip, fp] = a.toFixed(10).replace(/0+$/, '').replace(/\.$/, '').split('.');
+    return neg + ip.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (fp ? '.' + fp : '');
+  }
+
   const api = {
     DESKS, DRILL, VERBS, RANKS, BIN, ARROWS, KINDS: K, MINUS,
-    rng, shuffle, pickOne, fmt, wave, everyTask, boss, scheduler, payFor, streakMult, realPayOf, realPayQuestion, trainingTask, totalTasks, oneTask,
+    rng, shuffle, pickOne, fmt, wave, everyTask, boss, scheduler, payFor, streakMult, realPayOf, realPayQuestion, trainingTask, totalTasks, oneTask, calcEval, calcShow,
     _kit: { kind, finish, GEN, BUILD, SETS, bins, plain, VERB_CLOCK, VERB_PAY, VERB_WEIGHT, GDP, PEOPLE, EFFECTS, LOOP, REALNOM, COSTS, PHASES, NAMEIT, MICRO_ELASTIC, TYPES, MOVES, TOWNS, BOTHMOVES, PHIS, words },
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
