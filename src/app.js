@@ -187,6 +187,15 @@
     },
     chart(t, o) {
       const c = t.chart;
+      if (c.kind === 'ppc' || c.kind === 'sd' || c.kind === 'line') {
+        const svg = c.kind === 'ppc' ? ppcSVG(t) : c.kind === 'sd' ? sdSVG(t) : lineSVG(t);
+        const controls = c.pickOne || t.options.length === 3
+          ? `<div class="tk-controls points n${t.options.length}">${t.options.map((b, i) => `<button type="button" class="opt pointbtn" data-act="pick" data-i="${i}" data-key="${i + 1}"><span class="opt-label">${esc(b.label)}</span></button>`).join('')}</div>`
+          : `<div class="tk-controls bins n${t.options.length}">${t.options.map((b, i) => optBtn(i, b.label, '')).join('')}</div>`;
+        return t.text
+          ? `<div class="tk-body flow-body graph-body">${formHTML(`<p class="form-text">${esc(t.text)}</p>`, 'mini')}${svg}</div>${controls}`
+          : `<div class="tk-body chart-body">${svg}</div>${controls}`;
+      }
       if (c.kind === 'cycle') {
         const lit = c.pickOne ? '' : 'lit';
         const controls = c.pickOne
@@ -419,6 +428,113 @@
     </svg>`;
   }
 
+  /* ---------- graphs added Nov 17, 2026: the PPC, supply and demand, and a line of the inflation rate ----------
+     The PPC and supply and demand share one frame: the axis names sit at the ends of the axes, so the space beside
+     the axes is free for P and Q labels. What moves after the answer is moved by CSS on .chart.revealed. */
+  function graphFrame() {
+    const phone = window.innerWidth < 620;
+    const W = phone ? 400 : 520, H = phone ? 300 : 330;
+    return { W, H, L: 46, R: W - 34, T: 30, Bm: H - 32 };
+  }
+  const frameAxes = (f, yName, xName) => `<line class="axis" x1="${f.L}" y1="${f.T - 8}" x2="${f.L}" y2="${f.Bm}"/><line class="axis" x1="${f.L}" y1="${f.Bm}" x2="${f.R + 10}" y2="${f.Bm}"/>
+      <text class="ax" x="6" y="${f.T - 12}">${esc(yName)}</text><text class="ax" x="${f.R + 28}" y="${f.Bm + 23}" text-anchor="end">${esc(xName)}</text>`;
+  const tapMark = (i, X, Y, num, r) => `<g class="mk tap" data-mk="${i}" data-act="pick" data-i="${i}" role="button" aria-label="${esc(num.aria)}"><circle class="mk-hit" cx="${X.toFixed(1)}" cy="${Y.toFixed(1)}" r="${r + 9}"/><circle class="mk-dot" cx="${X.toFixed(1)}" cy="${Y.toFixed(1)}" r="${r}"/>${num.text ? `<text class="mk-num" x="${X.toFixed(1)}" y="${(Y + 6.5).toFixed(1)}" text-anchor="middle">${num.text}</text>` : ''}</g>`;
+
+  /* The PPC is a quarter circle of radius 1. Inside it is a recession, on it is potential real GDP. */
+  const PPC_START = { on: [0.7071, 0.7071], inside: [0.42, 0.42] };
+  const PPC_GROW = { out: 1.2, in: 0.8 };
+  function ppcSVG(t) {
+    const f = graphFrame(), c = t.chart, M = 1.3;
+    const X = (x) => f.L + (x / M) * (f.R - f.L), Y = (y) => f.Bm - (y / M) * (f.Bm - f.T);
+    const arc = (r, cls, style) => `<path class="${cls}"${style ? ` style="${style}"` : ''} d="M${X(0).toFixed(1)},${Y(r).toFixed(1)} A${(X(r) - X(0)).toFixed(1)} ${(Y(0) - Y(r)).toFixed(1)} 0 0 1 ${X(r).toFixed(1)},${Y(0).toFixed(1)}"/>`;
+    let inner = '';
+    if (c.pickOne) {
+      inner = arc(1, 'curve') + `<text class="lab" x="${(X(1) + 8).toFixed(1)}" y="${(Y(0.1)).toFixed(1)}">PPC</text>`
+        + c.points.map((p, i) => tapMark(i, X(p.x), Y(p.y), { text: i + 1, aria: 'Point ' + (i + 1) }, 17)).join('');
+    } else {
+      const [sx, sy] = PPC_START[c.dot];
+      const grow = c.curve ? PPC_GROW[c.curve] : 1;
+      const end = c.to ? PPC_START[c.to] : [sx * grow, sy * grow];
+      const dx = X(end[0]) - X(sx), dy = Y(end[1]) - Y(sy);
+      inner = (c.curve ? arc(1, 'curve was') : '')
+        + arc(1, `curve${c.curve ? ' grows' : ''}`, c.curve ? `--grow:${grow};transform-origin:${X(0).toFixed(1)}px ${Y(0).toFixed(1)}px` : '')
+        + `<text class="lab" x="${(X(1) + 8).toFixed(1)}" y="${Y(0.1).toFixed(1)}">PPC</text>`
+        + (c.curve ? `<text class="lab late go" x="${(f.L + 12).toFixed(1)}" y="${(Y(grow) + 24).toFixed(1)}">New PPC</text>` : '')
+        + `<circle class="ghost late" cx="${X(sx).toFixed(1)}" cy="${Y(sy).toFixed(1)}" r="12"/>`
+        + `<g class="econ moves" style="--dx:${dx.toFixed(1)}px;--dy:${dy.toFixed(1)}px"><circle class="econ-dot" cx="${X(sx).toFixed(1)}" cy="${Y(sy).toFixed(1)}" r="12"/>${c.curve === 'in' ? `<text class="lab" x="${(X(sx) - 17).toFixed(1)}" y="${(Y(sy) + 24).toFixed(1)}" text-anchor="end">Economy</text>` : `<text class="lab" x="${(X(sx) + 18).toFixed(1)}" y="${(Y(sy) + 6).toFixed(1)}">Economy</text>`}</g>`;
+    }
+    return `<svg class="chart graph ppc" viewBox="0 0 ${f.W} ${f.H}" role="img" aria-label="A production possibilities curve. Capital goods are on the side axis and consumer goods are on the bottom axis.">
+      ${frameAxes(f, 'Capital goods', 'Consumer goods')}${inner}</svg>`;
+  }
+
+  /* Supply and demand. Demand is P = 10 - Q, supply is P = Q, equilibrium is 5 and 5. */
+  let sdId = 0;
+  function sdSVG(t) {
+    const f = graphFrame(), c = t.chart, id = 'sdclip' + (++sdId);
+    const X = (q) => f.L + (q / 10) * (f.R - f.L), Y = (p) => f.Bm - (p / 10) * (f.Bm - f.T);
+    const lo = c.shift ? 2.2 : 1.6, hi = 10 - lo;
+    const dPath = `M${X(lo).toFixed(1)},${Y(hi).toFixed(1)} L${X(hi).toFixed(1)},${Y(lo).toFixed(1)}`;
+    const sPath = `M${X(lo).toFixed(1)},${Y(lo).toFixed(1)} L${X(hi).toFixed(1)},${Y(hi).toFixed(1)}`;
+    const dLab = (n, cls) => `<text class="lab dem-t ${cls || ''}" x="${(X(hi) + 7).toFixed(1)}" y="${(Y(lo) + 6).toFixed(1)}">D${n}</text>`;
+    const sLab = (n, cls) => `<text class="lab sup-t ${cls || ''}" x="${(X(hi) + 7).toFixed(1)}" y="${(Y(hi) + 6).toFixed(1)}">S${n}</text>`;
+    const sub = (n) => `<tspan class="late" font-size="12" dy="4">${n}</tspan>`;
+    const guide = (q, p, n, cls) => `<g class="${cls}"><path class="guide" d="M${f.L},${Y(p).toFixed(1)} H${X(q).toFixed(1)} V${f.Bm}"/><text class="lab" x="${f.L - 6}" y="${(Y(p) + 6).toFixed(1)}" text-anchor="end">P${n}</text><text class="lab" x="${X(q).toFixed(1)}" y="${f.Bm + 21}" text-anchor="middle">Q${n}</text></g>`;
+    let inner = '', curves = '';
+    if (c.shift) {
+      const a = c.shift.d * 2, px = (a / 10) * (f.R - f.L);
+      const isD = c.shift.c === 'D';
+      const q2 = 5 + a / 2, p2 = isD ? 5 + a / 2 : 5 - a / 2;
+      const still = isD ? `<path class="curve sup" d="${sPath}"/>${sLab('')}` : `<path class="curve dem" d="${dPath}"/>${dLab('')}`;
+      const was = isD ? `<path class="curve dem was" d="${dPath}"/><text class="lab dem-t" x="${(X(hi) + 7).toFixed(1)}" y="${(Y(lo) + 6).toFixed(1)}">D${sub(1)}</text>` : `<path class="curve sup was" d="${sPath}"/><text class="lab sup-t" x="${(X(hi) + 7).toFixed(1)}" y="${(Y(hi) + 6).toFixed(1)}">S${sub(1)}</text>`;
+      const mover = `<g class="slides" style="--dx:${px.toFixed(1)}px"><path class="curve ${isD ? 'dem' : 'sup'}" d="${isD ? dPath : sPath}"/><text class="lab ${isD ? 'dem-t' : 'sup-t'} late" x="${(X(hi) + 7).toFixed(1)}" y="${((isD ? Y(lo) : Y(hi)) + 6).toFixed(1)}">${isD ? 'D' : 'S'}<tspan font-size="12" dy="4">2</tspan></text></g>`;
+      curves = `${still}${was}${mover}`;
+      inner = `${guide(5, 5, sub(1), '')}${guide(q2, p2, '<tspan font-size="12" dy="4">2</tspan>', 'late')}`;
+      curves += `<circle class="eq" cx="${X(5).toFixed(1)}" cy="${Y(5).toFixed(1)}" r="7"/><circle class="eq new late" cx="${X(q2).toFixed(1)}" cy="${Y(p2).toFixed(1)}" r="8"/>`;
+    } else {
+      const k = c.control, y = Y(k.p), binds = k.type === 'ceiling' ? k.p < 5 : k.p > 5;
+      const name = c.labor ? 'Minimum wage' : k.type === 'ceiling' ? 'Price ceiling' : 'Price floor';
+      const above = k.p > 5;
+      const qd = 10 - k.p, qs = k.p, x1 = X(Math.min(qd, qs)), x2 = X(Math.max(qd, qs));
+      const by = above ? y - 13 : y + 13;
+      const result = binds
+        ? `<g class="late"><path class="bracket" d="M${x1.toFixed(1)},${(by + (above ? 7 : -7)).toFixed(1)} V${by.toFixed(1)} H${x2.toFixed(1)} V${(by + (above ? 7 : -7)).toFixed(1)}"/><text class="lab" x="${((x1 + x2) / 2).toFixed(1)}" y="${(above ? by - 8 : by + 19).toFixed(1)}" text-anchor="middle">${above ? 'Surplus' : 'Shortage'}</text>
+            <circle class="eq new" cx="${X(qd).toFixed(1)}" cy="${y.toFixed(1)}" r="6"/><circle class="eq new" cx="${X(qs).toFixed(1)}" cy="${y.toFixed(1)}" r="6"/>
+            <path class="guide" d="M${X(qd).toFixed(1)},${y.toFixed(1)} V${f.Bm}"/><path class="guide" d="M${X(qs).toFixed(1)},${y.toFixed(1)} V${f.Bm}"/>
+            <text class="lab" x="${X(qd).toFixed(1)}" y="${f.Bm + 21}" text-anchor="middle">Qd</text><text class="lab" x="${X(qs).toFixed(1)}" y="${f.Bm + 21}" text-anchor="middle">Qs</text></g>`
+        : `<g class="late"><circle class="ring" cx="${X(5).toFixed(1)}" cy="${Y(5).toFixed(1)}" r="15"/><text class="lab" x="${(X(5) + 30).toFixed(1)}" y="${(Y(5) + 6).toFixed(1)}">Stays here</text></g>`;
+      inner = `<path class="curve dem" d="${dPath}"/>${dLab('')}<path class="curve sup" d="${sPath}"/>${sLab('')}
+        <line class="control" x1="${f.L}" x2="${f.W - 8}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>
+        <text class="lab" x="${f.W - 8}" y="${(above ? y + 21 : y - 9).toFixed(1)}" text-anchor="end">${name}</text>
+        <circle class="eq" cx="${X(5).toFixed(1)}" cy="${Y(5).toFixed(1)}" r="7"/>${result}`;
+    }
+    const yName = c.labor ? 'Wage' : 'Price', xName = c.labor ? 'Workers' : 'Quantity';
+    return `<svg class="chart graph sd" viewBox="0 0 ${f.W} ${f.H}" role="img" aria-label="A supply and demand graph. Demand slopes down and supply slopes up.">
+      <defs><clipPath id="${id}"><rect x="${f.L}" y="${f.T - 10}" width="${f.R - f.L + 34}" height="${f.Bm - f.T + 10}"/></clipPath></defs>
+      ${frameAxes(f, yName, xName)}${inner}<g clip-path="url(#${id})">${curves}</g></svg>`;
+  }
+
+  /* One point a year, joined by a line, with the number on every point and a line at zero. */
+  function lineSVG(t) {
+    chartSize();
+    const pts = t.chart.pts, vals = pts.map((p) => p.v);
+    const hi = Math.max(...vals, 0), lo = Math.min(...vals, 0);
+    const top = CT + 30, bottom = CH - CB - (lo < 0 ? 30 : 4);
+    const y = (v) => bottom - (v - lo) / ((hi - lo) || 1) * (bottom - top);
+    const n = pts.length, slot = (CW - CL - CR) / n;
+    const x = (i) => CL + slot * i + slot / 2;
+    const num = (v) => `${v < 0 ? B.MINUS : ''}${Math.abs(v)}${t.chart.suf || ''}`;
+    const path = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p.v).toFixed(1)}`).join(' ');
+    const marks = pts.map((p, i) => tapMark(i, x(i), y(p.v), { text: '', aria: p.label }, 12)
+      + `<text class="bar-val" x="${x(i).toFixed(1)}" y="${(p.v < 0 ? y(p.v) + 32 : y(p.v) - 19).toFixed(1)}" text-anchor="middle">${esc(num(p.v))}</text>`).join('');
+    const ticks = pts.map((p, i) => `<text class="ax" x="${x(i).toFixed(1)}" y="${CH - 12}" text-anchor="middle">${esc(p.label)}</text>`).join('');
+    return `<svg class="chart graph linechart" viewBox="0 0 ${CW} ${CH}" role="img" aria-label="A line chart of the inflation rate, one point for each of ${n} years.">
+      <line class="axis" x1="${CL}" y1="${CT}" x2="${CL}" y2="${CH - CB}"/><line class="axis zero" x1="${CL}" y1="${y(0).toFixed(1)}" x2="${CW - CR}" y2="${y(0).toFixed(1)}"/>
+      <text class="ax" transform="translate(16 ${(CH - CB) / 2 + 6}) rotate(-90)" text-anchor="middle">Inflation rate</text>
+      ${lo < 0 ? `<text class="ax" x="${CL - 6}" y="${(y(0) + 5).toFixed(1)}" text-anchor="end">0</text>` : ''}
+      <path class="trend" d="${path}"/>${marks}${ticks}
+    </svg>`;
+  }
+
   /* ---------- circular flow: same geometry as the review sheet. Inner loop real, outer loop money. ---------- */
   const FLOW_PATHS = [
     'M520 130 L520 80 L120 80 L120 130',
@@ -628,7 +744,7 @@
       case 'wave': return 'See the green part of the wave';
       case 'frq': return t.blanks.map((b) => b.options[b.answer]).join(', ');
       case 'label': { const st = t.steps[Math.min(Run.li, t.steps.length - 1)]; return t.options[st.answer].label; }
-      case 'chart': if (t.chart.pickOne) return `Point ${t.answer + 1}${t.options[t.answer].meaning ? ': ' + t.options[t.answer].meaning : ''}`; return t.options[t.answer].label;
+      case 'chart': if (t.chart.pickOne && t.chart.kind === 'cycle') return `Point ${t.answer + 1}${t.options[t.answer].meaning ? ': ' + t.options[t.answer].meaning : ''}`; return t.options[t.answer].label;
       default: return t.options[t.answer].label;
     }
   }
@@ -687,7 +803,7 @@
       t.options.forEach((o, i) => {
         const el = $(`.chip[data-i="${i}"]`); if (!el) return;
         if (i !== t.answer && !el.classList.contains('is-wrong')) el.classList.add('is-other');
-        const tag = $('.chip-tag', el); if (tag) tag.textContent = o.tag || '';
+        const tag = $('.chip-tag', el); if (tag) tag.textContent = o.note || o.tag || '';
       });
     }
     if (t.verb === 'order') {
@@ -775,7 +891,7 @@
     }
     if (t.verb === 'chart') {
       const svg = $('.chart'); if (svg) svg.classList.add('revealed');
-      if (t.chart.kind === 'cycle' && t.chart.pickOne) { const m = $(`.mk[data-mk="${t.answer}"]`); if (m) m.classList.add('is-right'); }
+      if (t.chart.pickOne && t.chart.kind !== 'base') { const m = $(`.mk[data-mk="${t.answer}"]`); if (m) m.classList.add('is-right'); }
     }
   }
   /* wave: where the right zones are, drawn behind the curve */

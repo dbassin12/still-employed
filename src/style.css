@@ -12,6 +12,8 @@
   --no: #D3122C;
   --mint: #A6F0D3;
   --neutral: #2230C4;
+  --demand: #2230C4;     /* demand curves */
+  --supply: #B8460A;     /* supply curves */
 
   /* the walls: one per desk, all strong enough for white type */
   --w-gdp: #2230C4;
@@ -291,6 +293,42 @@ body.answered kbd, body.answered .bl-help, body.answered .wall-help { display: n
 .mk.is-right .mk-dot { fill: var(--go); }
 .mk.is-wrong .mk-dot { fill: var(--no); }
 @keyframes pulse { 50% { transform: scale(1.18); } }
+
+/* graphs added Nov 17, 2026: the PPC, supply and demand, a line of the inflation rate.
+   Nothing moves until the answer is in. Then .revealed slides the curve or the dot, and the late parts fade in after it. */
+.graph .curve { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linecap: round; }
+.graph .curve.dem { stroke: var(--demand); }
+.graph .curve.sup { stroke: var(--supply); }
+.graph .dem-t { fill: var(--demand); }
+.graph .sup-t { fill: var(--supply); }
+.graph .curve.was { stroke-dasharray: 9 8; opacity: 0; }
+.graph.revealed .curve.was { opacity: .5; }
+.graph .curve.grows { transition: transform .9s ease-in-out; vector-effect: non-scaling-stroke; }
+.graph.revealed .curve.grows { transform: scale(var(--grow)); stroke: var(--go); }
+.graph .slides, .graph .econ { transition: transform .9s ease-in-out; }
+.graph.revealed .slides { transform: translateX(var(--dx)); }
+.graph.revealed .econ.moves { transform: translate(var(--dx), var(--dy)); }
+.graph .late { opacity: 0; transition: opacity .35s .85s; }
+.graph.revealed .late { opacity: 1; }
+.graph .lab.go { fill: var(--go); }
+.graph .econ-dot { fill: var(--no); stroke: var(--bond); stroke-width: 3; }
+.graph .ghost { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-dasharray: 4 4; }
+.graph .eq { fill: var(--ink); stroke: var(--bond); stroke-width: 2.5; }
+.graph .eq.new { fill: var(--go); }
+.graph .ring { fill: none; stroke: var(--go); stroke-width: 4; }
+.graph .guide { fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-dasharray: 5 5; opacity: .7; }
+.graph .control { stroke: var(--ink); stroke-width: 4; }
+.graph .bracket { fill: none; stroke: var(--go); stroke-width: 3.5; }
+.graph .trend { fill: none; stroke: var(--neutral); stroke-width: 4.5; stroke-linejoin: round; }
+.graph .axis.zero { stroke-width: 2; }
+.linechart .mk-dot { fill: var(--neutral); }
+.linechart .mk.is-right .mk-dot { fill: var(--go); }
+.linechart .mk.is-wrong .mk-dot { fill: var(--no); }
+.mk.tap.struck { opacity: .25; }
+.linechart .mk.is-locked { opacity: 1; }
+/* a graph never squeezes below a readable size. On a short phone the task scrolls instead. */
+.graph-body { min-height: 9rem; }
+@media not (min-aspect-ratio: 11/10) { .graph-body { min-height: 17rem; } }
 
 /* circular flow */
 .flow-body { justify-content: flex-start; }

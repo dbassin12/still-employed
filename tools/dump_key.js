@@ -40,7 +40,14 @@ Object.keys(B.DESKS).forEach((d) => {
       const markers = t.chart.markers.map((m, i) => `point ${i + 1}: ${m.phase}, ${m.gap} gap`).join('; ');
       lines.push(`> Chart markers: ${markers}`);
       t.options.forEach((o, i) => lines.push(`- ${i === t.answer ? '* ' : ''}${o.label}`));
-    } else t.options.forEach((o, i) => lines.push(`- ${i === t.answer ? '* ' : ''}${o.label}${o.why && t.verb === 'pick' ? ' (' + o.why + ')' : ''}`));
+    } else {
+      if (t.verb === 'chart' && t.chart.kind === 'ppc' && t.chart.points) lines.push(`> PPC graph: ${t.chart.points.map((pt, i) => `point ${i + 1} is ${pt.where === 'on' ? 'on' : pt.where} the curve`).join('; ')}`);
+      if (t.verb === 'chart' && t.chart.kind === 'ppc' && !t.chart.points) lines.push(`> PPC graph: the economy starts ${t.chart.dot === 'on' ? 'on' : 'inside'} the curve. After the answer ${t.chart.curve ? 'the curve shifts ' + t.chart.curve : 'the dot moves ' + (t.chart.to === 'on' ? 'back to the curve' : 'inside the curve')}.`);
+      if (t.verb === 'chart' && t.chart.kind === 'sd' && t.chart.control) lines.push(`> Supply and demand graph: a ${t.chart.labor ? 'minimum wage' : 'price ' + t.chart.control.type} drawn ${t.chart.control.p > 5 ? 'above' : 'below'} equilibrium.`);
+      if (t.verb === 'chart' && t.chart.kind === 'sd' && t.chart.shift) lines.push('> Supply and demand graph: after the answer the curve slides and the new price and quantity appear.');
+      if (t.verb === 'chart' && t.chart.kind === 'line') lines.push(`> Line of the inflation rate: ${t.chart.pts.map((pt) => `${pt.label} = ${pt.v}%`).join('; ')}`);
+      t.options.forEach((o, i) => lines.push(`- ${i === t.answer ? '* ' : ''}${o.label}${o.why && t.verb === 'pick' ? ' (' + o.why + ')' : ''}`));
+    }
     lines.push(`Why: ${t.why}`);
     if (t.work && t.work !== t.why) lines.push(`Work: ${t.work}`);
     if (t.formula) lines.push(`Formula shown: ${t.formula}`);

@@ -23,6 +23,8 @@
   --no: #D3122C;
   --mint: #A6F0D3;
   --neutral: #2230C4;
+  --demand: #2230C4;     /* demand curves */
+  --supply: #B8460A;     /* supply curves */
 
   /* the walls: one per desk, all strong enough for white type */
   --w-gdp: #2230C4;
@@ -302,6 +304,42 @@ body.answered kbd, body.answered .bl-help, body.answered .wall-help { display: n
 .mk.is-right .mk-dot { fill: var(--go); }
 .mk.is-wrong .mk-dot { fill: var(--no); }
 @keyframes pulse { 50% { transform: scale(1.18); } }
+
+/* graphs added Nov 17, 2026: the PPC, supply and demand, a line of the inflation rate.
+   Nothing moves until the answer is in. Then .revealed slides the curve or the dot, and the late parts fade in after it. */
+.graph .curve { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linecap: round; }
+.graph .curve.dem { stroke: var(--demand); }
+.graph .curve.sup { stroke: var(--supply); }
+.graph .dem-t { fill: var(--demand); }
+.graph .sup-t { fill: var(--supply); }
+.graph .curve.was { stroke-dasharray: 9 8; opacity: 0; }
+.graph.revealed .curve.was { opacity: .5; }
+.graph .curve.grows { transition: transform .9s ease-in-out; vector-effect: non-scaling-stroke; }
+.graph.revealed .curve.grows { transform: scale(var(--grow)); stroke: var(--go); }
+.graph .slides, .graph .econ { transition: transform .9s ease-in-out; }
+.graph.revealed .slides { transform: translateX(var(--dx)); }
+.graph.revealed .econ.moves { transform: translate(var(--dx), var(--dy)); }
+.graph .late { opacity: 0; transition: opacity .35s .85s; }
+.graph.revealed .late { opacity: 1; }
+.graph .lab.go { fill: var(--go); }
+.graph .econ-dot { fill: var(--no); stroke: var(--bond); stroke-width: 3; }
+.graph .ghost { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-dasharray: 4 4; }
+.graph .eq { fill: var(--ink); stroke: var(--bond); stroke-width: 2.5; }
+.graph .eq.new { fill: var(--go); }
+.graph .ring { fill: none; stroke: var(--go); stroke-width: 4; }
+.graph .guide { fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-dasharray: 5 5; opacity: .7; }
+.graph .control { stroke: var(--ink); stroke-width: 4; }
+.graph .bracket { fill: none; stroke: var(--go); stroke-width: 3.5; }
+.graph .trend { fill: none; stroke: var(--neutral); stroke-width: 4.5; stroke-linejoin: round; }
+.graph .axis.zero { stroke-width: 2; }
+.linechart .mk-dot { fill: var(--neutral); }
+.linechart .mk.is-right .mk-dot { fill: var(--go); }
+.linechart .mk.is-wrong .mk-dot { fill: var(--no); }
+.mk.tap.struck { opacity: .25; }
+.linechart .mk.is-locked { opacity: 1; }
+/* a graph never squeezes below a readable size. On a short phone the task scrolls instead. */
+.graph-body { min-height: 9rem; }
+@media not (min-aspect-ratio: 11/10) { .graph-body { min-height: 17rem; } }
 
 /* circular flow */
 .flow-body { justify-content: flex-start; }
@@ -3548,27 +3586,42 @@ body.answered .keypad { display: none; }
     });
   });
 
-  /* ================= odd one out ================= */
+  /* ================= which one is different ================= */
+  /* Every one of these says what the four things are being sorted by and names the possible groups,
+     so a student is never guessing the rule. The reveal names each group in full. */
   const short = (s) => s.length <= 46;
+  const PART = { C: 'consumption (C)', I: 'investment (I)', G: 'government purchases (G)', Xn: 'net exports (Xn)' };
+  const LEFT_OUT = { used: 'a used good', intermediate: 'an intermediate good', financial: 'a stock or bond', transfer: 'a transfer', abroad: 'made abroad' };
+  const LEFT_OUT3 = { used: 'used goods', intermediate: 'intermediate goods', financial: 'stocks and bonds', transfer: 'transfers', abroad: 'made abroad' };
+  const binNote = (k) => `${B.BIN[k].label}: ${B.BIN[k].def}`;
+  const SAME = 'Three are the same. Tap the one that is different.';
+  const gdpNot = (a, b) => {
+    const aIn = !!PART[a], bIn = !!PART[b];
+    if (!aIn && !bIn) return { ask: 'None of these count in U.S. GDP. Three are left out for the same reason. Tap the one left out for a different reason.', why: `That one is ${LEFT_OUT[b]}. The other three are ${LEFT_OUT3[a]}.` };
+    const ask = `Each one either counts in U.S. GDP or does not. ${SAME}`;
+    if (aIn) return { ask, why: `That one does not count: it is ${LEFT_OUT[b]}. The other three count as ${PART[a]}.` };
+    return { ask, why: `That one counts as ${PART[b]}. The other three do not count: they are ${LEFT_OUT3[a]}.` };
+  };
+  const lower = (s) => s.charAt(0).toLowerCase() + s.slice(1);
   const ODD = [
-    ...[['C', 'I'], ['I', 'C'], ['G', 'C'], ['C', 'G'], ['I', 'G'], ['G', 'I'], ['Xn', 'C'], ['C', 'Xn'], ['Xn', 'I'], ['I', 'Xn'], ['G', 'Xn'], ['Xn', 'G']].map(([a, b]) => ({ d: 'gdp', lvl: 2, label: (g) => g.s, group: (k) => GDP.filter((g) => g.line === k && g.lvl <= 2), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['transfer', 'G'], ['G', 'transfer'], ['used', 'C'], ['C', 'used'], ['financial', 'I'], ['I', 'financial'], ['intermediate', 'C'], ['abroad', 'C'], ['C', 'abroad'], ['used', 'financial'], ['transfer', 'used']].map(([a, b]) => ({ d: 'gdp', lvl: 2, label: (g) => g.s, group: (k) => GDP.filter((g) => (g.line === k || g.no === k) && g.lvl <= 2 && !((a === 'G' || b === 'G') && /gift/i.test(g.s))), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['E', 'U'], ['U', 'E'], ['N', 'E'], ['E', 'N'], ['U', 'N'], ['N', 'U'], ['E', 'U'], ['U', 'N'], ['N', 'E']].map(([a, b], i) => ({ d: 'jobs', lvl: 1, label: (p) => p.s, group: (k) => PEOPLE.filter((p) => p.st === k), tag: (k) => B.BIN[k].label, a, b, tagKey: i })),
-    ...[['gains', 'loses'], ['loses', 'gains'], ['protected', 'loses'], ['loses', 'protected'], ['gains', 'protected'], ['protected', 'gains']].map(([a, b]) => ({ d: 'costs', lvl: 1, ask: 'Surprise inflation hits. Three go together. Tap the one that does not.', why: `That one ${{ gains: 'gains', loses: 'loses', protected: 'is protected' }[b]}. The other three ${{ gains: 'gain', loses: 'lose', protected: 'are protected' }[a]}.`, label: (e) => e.s, group: (k) => EFFECTS.filter((e) => e.key === k), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['out', 'in'], ['in', 'out'], ['out', 'in'], ['in', 'out'], ['out', 'in'], ['in', 'out']].map(([a, b]) => ({ d: 'gdp', lvl: 1, label: (l) => l.s, group: (k) => LOOP.filter((l) => l.dir === k), tag: (k) => (k === 'out' ? 'Leaves the loop' : 'Comes into the loop'), a, b })),
-    ...[['Real', 'Nominal'], ['Nominal', 'Real'], ['Real', 'Nominal'], ['Nominal', 'Real']].map(([a, b]) => ({ d: 'real', lvl: 1, ask: 'All four describe GDP. Three go together. Tap the one that does not.', label: (x) => x.t, group: (k) => REALNOM.filter((x) => x.key === k && short(x.t) && !/\b(pay|rate|raise)\b/i.test(x.t)), tag: (k) => k, a, b })),
-    ...[['dis', 'de'], ['de', 'dis'], ['rising', 'de'], ['dis', 'rising'], ['rising', 'dis'], ['de', 'rising']].map(([a, b]) => ({ d: 'prices', lvl: 2, label: (x) => x.t, group: (k) => NAMEIT.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['expansion', 'contraction'], ['contraction', 'expansion'], ['expansion', 'contraction'], ['contraction', 'expansion']].map(([a, b]) => ({ d: 'cycle', lvl: 1, label: (x) => x.t, group: (k) => PHASES.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['menu', 'shoe'], ['shoe', 'menu']].map(([a, b]) => ({ d: 'costs', lvl: 2, label: (x) => x.t, group: (k) => COSTS.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['Elastic', 'Inelastic'], ['Inelastic', 'Elastic']].map(([a, b]) => ({ d: 'micro', lvl: 1, ask: 'Think about how buyers respond to a price change. Three go together. Tap the one that does not.', label: (x) => x.t, group: (k) => MICRO_ELASTIC.filter((x) => x.key === k && !/%/.test(x.t)), tag: (k) => k, a, b })),
+    ...[['C', 'I'], ['I', 'C'], ['G', 'C'], ['C', 'G'], ['I', 'G'], ['G', 'I'], ['Xn', 'C'], ['C', 'Xn'], ['Xn', 'I'], ['I', 'Xn'], ['G', 'Xn'], ['Xn', 'G']].map(([a, b]) => ({ d: 'gdp', lvl: 2, ask: 'Each one counts in GDP as C, I, G, or Xn. Three are the same part. Tap the one that is a different part.', why: `That one is ${PART[b]}. The other three are ${PART[a]}.`, label: (g) => g.s, group: (k) => GDP.filter((g) => g.line === k && g.lvl <= 2), tag: (k) => B.BIN[k].label, note: binNote, a, b })),
+    ...[['transfer', 'G'], ['G', 'transfer'], ['used', 'C'], ['C', 'used'], ['financial', 'I'], ['I', 'financial'], ['intermediate', 'C'], ['abroad', 'C'], ['C', 'abroad'], ['used', 'financial'], ['transfer', 'used']].map(([a, b]) => Object.assign({ d: 'gdp', lvl: 2, label: (g) => g.s, group: (k) => GDP.filter((g) => (g.line === k || g.no === k) && g.lvl <= 2 && !((a === 'G' || b === 'G') && /gift/i.test(g.s))), tag: (k) => B.BIN[k].label, note: (k) => (PART[k] ? `Counts as ${B.BIN[k].label}` : `Not counted: ${lower(B.BIN[k].label)}`), a, b }, gdpNot(a, b))),
+    ...[['E', 'U'], ['U', 'E'], ['N', 'E'], ['E', 'N'], ['U', 'N'], ['N', 'U'], ['E', 'U'], ['U', 'N'], ['N', 'E']].map(([a, b], i) => ({ d: 'jobs', lvl: 1, ask: `The Bureau counts each person as employed, unemployed, or not in the labor force. Three get the same label. Tap the one who gets a different label.`, why: `That one is ${lower(B.BIN[b].label)}. The other three are ${lower(B.BIN[a].label)}.`, label: (p) => p.s, group: (k) => PEOPLE.filter((p) => p.st === k), tag: (k) => B.BIN[k].label, a, b, tagKey: i })),
+    ...[['gains', 'loses'], ['loses', 'gains'], ['protected', 'loses'], ['loses', 'protected'], ['gains', 'protected'], ['protected', 'gains']].map(([a, b]) => ({ d: 'costs', lvl: 1, ask: 'Surprise inflation hits. Each one gains, loses, or is protected. Three get the same result. Tap the one that gets a different result.', why: `That one ${{ gains: 'gains', loses: 'loses', protected: 'is protected' }[b]}. The other three ${{ gains: 'gain', loses: 'lose', protected: 'are protected' }[a]}.`, label: (e) => e.s, group: (k) => EFFECTS.filter((e) => e.key === k), tag: (k) => B.BIN[k].label, a, b })),
+    ...[['out', 'in'], ['in', 'out'], ['out', 'in'], ['in', 'out'], ['out', 'in'], ['in', 'out']].map(([a, b]) => ({ d: 'gdp', lvl: 1, ask: `Each one either takes money out of the circular flow or puts money into it. ${SAME}`, why: `That one ${b === 'out' ? 'takes money out of the loop' : 'puts money into the loop'}. The other three ${a === 'out' ? 'take money out' : 'put money in'}.`, label: (l) => l.s, group: (k) => LOOP.filter((l) => l.dir === k), tag: (k) => (k === 'out' ? 'Leaves the loop' : 'Comes into the loop'), a, b })),
+    ...[['Real', 'Nominal'], ['Nominal', 'Real'], ['Real', 'Nominal'], ['Nominal', 'Real']].map(([a, b]) => ({ d: 'real', lvl: 1, ask: 'Each line describes real GDP or nominal GDP. Three describe the same one. Tap the line that describes the other one.', why: `That line describes ${lower(b)} GDP. The other three describe ${lower(a)} GDP.`, label: (x) => x.t, group: (k) => REALNOM.filter((x) => x.key === k && short(x.t) && !/\b(pay|rate|raise)\b/i.test(x.t)), tag: (k) => `${k} GDP`, a, b })),
+    ...[['dis', 'de'], ['de', 'dis'], ['rising', 'de'], ['dis', 'rising'], ['rising', 'dis'], ['de', 'rising']].map(([a, b]) => ({ d: 'prices', lvl: 2, ask: `Each line is rising inflation, disinflation, or deflation. ${SAME}`, why: `That one is ${lower(B.BIN[b].label)}. The other three are ${lower(B.BIN[a].label)}.`, label: (x) => x.t, group: (k) => NAMEIT.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, note: binNote, a, b })),
+    ...[['expansion', 'contraction'], ['contraction', 'expansion'], ['expansion', 'contraction'], ['contraction', 'expansion']].map(([a, b]) => ({ d: 'cycle', lvl: 1, ask: 'Each line describes an expansion or a contraction. Three describe the same phase. Tap the line that describes the other phase.', why: `That line describes ${b === 'expansion' ? 'an expansion' : 'a contraction'}. The other three describe ${a === 'expansion' ? 'an expansion' : 'a contraction'}.`, label: (x) => x.t, group: (k) => PHASES.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, note: binNote, a, b })),
+    ...[['menu', 'shoe'], ['shoe', 'menu']].map(([a, b]) => ({ d: 'costs', lvl: 2, ask: `Each one is a menu cost or a shoe-leather cost of inflation. ${SAME}`, why: `That one is a ${b === 'menu' ? 'menu' : 'shoe-leather'} cost. The other three are ${a === 'menu' ? 'menu' : 'shoe-leather'} costs.`, label: (x) => x.t, group: (k) => COSTS.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, note: binNote, a, b })),
+    ...[['Elastic', 'Inelastic'], ['Inelastic', 'Elastic']].map(([a, b]) => ({ d: 'micro', lvl: 1, ask: `The price goes up. For each one, demand is elastic (buyers switch away) or inelastic (buyers keep buying). ${SAME}`, why: `Demand for that one is ${lower(b)}. Demand for the other three is ${lower(a)}.`, label: (x) => x.t, group: (k) => MICRO_ELASTIC.filter((x) => x.key === k && !/%/.test(x.t)), tag: (k) => k, note: (k) => (k === 'Elastic' ? 'Elastic: buyers can switch away' : 'Inelastic: buyers keep buying'), a, b })),
   ];
   const oddRecs = ODD.filter((o) => o.group(o.a).length >= 3 && o.group(o.b).length >= 1).map((o, i) => Object.assign({ k: `o${i}` }, o));
   eachDesk(oddRecs, 'odd', 'oddone', (x, r) => {
     const three = shuffle(r, x.group(x.a)).slice(0, 3);
     const odd = pickOne(r, x.group(x.b));
     const all = shuffle(r, three.concat([odd]));
-    const options = all.map((rec) => ({ label: x.label(rec), tag: rec === odd ? x.tag(x.b) : x.tag(x.a) }));
-    return fin({ desk: x.d, verb: 'oddone', lvl: x.lvl, order: 'ODD ONE OUT', ask: x.ask || 'Three go together. Tap the one that does not.', options, answer: all.indexOf(odd), why: x.why || `That one is ${x.tag(x.b)}. The other three are ${x.tag(x.a)}.` }, options.map((o) => o.label));
+    const options = all.map((rec) => { const k = rec === odd ? x.b : x.a; return { label: x.label(rec), tag: x.tag(k), note: x.note ? x.note(k) : x.tag(k) }; });
+    return fin({ desk: x.d, verb: 'oddone', lvl: x.lvl, order: 'WHICH ONE IS DIFFERENT?', ask: x.ask, options, answer: all.indexOf(odd), why: x.why }, options.map((o) => o.label));
   });
 
   /* ================= tap the wave: anywhere on the curve, no markers ================= */
@@ -3627,6 +3680,144 @@ body.answered .keypad { display: none; }
     const options = FLOW_SPOTS.map((label) => ({ label }));
     return finish({ desk: 'gdp', verb: 'label', lvl: 2, diagram: 'flow', order: 'LABEL THE LOOP', ask: 'Name each lit part of the circular flow.', options, steps: spots.map((s) => ({ spot: s, answer: s })), why: 'Inner loop: real things. Outer loop: money. Top: product market. Bottom: factor market.' });
   });
+
+  /* ================= more graphs (Nov 17, 2026) =================
+     Three new pictures, all under the chart verb, so the clock, the pay, and the keys are the ones students know.
+     - ppc: the production possibilities curve from Unit 1, read as Unit 2 reads it. On the curve is potential real GDP,
+       inside it is a recession, and only growth moves the curve. After the answer the curve shifts or the dot moves.
+     - sd: supply and demand from Unit 1. A price ceiling or floor to read, and a curve that shifts after the answer.
+     - line: the inflation rate as a line. A falling line is not falling prices.
+     Every key below is computed from the numbers in the record, and bank.test.js computes it again its own way. */
+  const graphTask = (t, more) => { fin(t, t.options.map((o) => o.label)); t.clock = Math.round((t.clock + (more || 5)) * 10) / 10; return t; };
+  const PPC_LAYOUTS = [
+    { k: 'a', on: 52, inside: [0.44, 0.42], outside: [0.90, 0.74] },
+    { k: 'b', on: 28, inside: [0.32, 0.56], outside: [0.74, 0.88] },
+    { k: 'c', on: 66, inside: [0.58, 0.30], outside: [0.92, 0.66] },
+  ];
+  const PPC_ASKS = [
+    { k: 'rec', prop: 'inside', lvl: 1, order: 'TAP THE RECESSION', ask: 'The curve is what the economy can make at full employment. Tap the point that shows a recession.', y: 'Inside the curve, workers and plants sit idle. Actual real GDP is below potential.' },
+    { k: 'cyc', prop: 'inside', lvl: 2, order: 'TAP CYCLICAL UNEMPLOYMENT', ask: 'The curve is what the economy can make at full employment. Tap the point with cyclical unemployment.', y: 'Cyclical unemployment means idle workers, so output is inside the curve.' },
+    { k: 'full', prop: 'on', lvl: 2, order: 'TAP FULL EMPLOYMENT', ask: 'Tap the point where actual real GDP equals potential real GDP.', y: 'On the curve, the economy is at full employment. Unemployment equals the natural rate.' },
+    { k: 'out', prop: 'outside', lvl: 2, order: 'TAP THE POINT OUT OF REACH', ask: 'Tap the point the economy cannot reach until the curve shifts out.', y: 'Outside the curve takes more resources or better technology.' },
+    { k: 'gap', prop: 'inside', lvl: 3, order: 'TAP THE NEGATIVE GAP', ask: 'The curve is potential real GDP. Tap the point with a negative output gap.', y: 'A negative gap means actual real GDP is below potential. That is inside the curve.' },
+    { k: 'nat', prop: 'on', lvl: 3, order: 'TAP THE NATURAL RATE', ask: 'Tap the point where unemployment equals the natural rate.', y: 'At the natural rate there is no cyclical unemployment, so the economy is on the curve.' },
+  ];
+  const rad = (deg) => deg * Math.PI / 180;
+  const ppcPoints = (L) => [
+    { where: 'inside', x: L.inside[0], y: L.inside[1] },
+    { where: 'on', x: Math.cos(rad(L.on)), y: Math.sin(rad(L.on)) },
+    { where: 'outside', x: L.outside[0], y: L.outside[1] },
+  ];
+  const ppcTapRecs = [];
+  PPC_ASKS.forEach((a) => PPC_LAYOUTS.forEach((L) => ppcTapRecs.push({ k: a.k + '-' + L.k, lvl: a.lvl, a, L })));
+  kind('ppc-tap', 'cycle', 'chart', ppcTapRecs, (x, r) => {
+    const pts = shuffle(r, ppcPoints(x.L));
+    return finish({
+      desk: 'cycle', verb: 'chart', lvl: x.a.lvl, order: x.a.order, ask: x.a.ask,
+      chart: { kind: 'ppc', points: pts, pickOne: true, prop: x.a.prop },
+      options: pts.map((p, i) => ({ label: 'Point ' + (i + 1) })), answer: pts.findIndex((p) => p.where === x.a.prop), why: x.a.y,
+    });
+  });
+
+  /* curve: 'out', 'in', or null. dot: where the economy starts and, when the curve stays put, where it ends up. */
+  const PPC_MOVES = [
+    { k: 'layoffs', lvl: 2, t: 'A recession hits. Firms lay off workers and idle their plants.', curve: null, from: 'on', to: 'inside', y: 'The workers and plants still exist, so the curve stays. The economy moves to a point inside it.' },
+    { k: 'rehire', lvl: 2, t: 'The recession ends. Laid-off workers are hired back.', curve: null, from: 'inside', to: 'on', y: 'Idle workers go back to work. The economy moves back to the same curve.' },
+    { k: 'cyclical', lvl: 3, t: 'Cyclical unemployment rises from 0% to 3%.', curve: null, from: 'on', to: 'inside', y: 'More idle workers means less output from the same resources. A move inside the curve, not a shift.' },
+    { k: 'natural', lvl: 3, t: 'Unemployment falls from 8% back to the natural rate of 5%.', curve: null, from: 'inside', to: 'on', y: 'The economy returns to full employment. It moves back to the curve it already had.' },
+    { k: 'tech', lvl: 1, t: 'New technology lets every worker make more.', curve: 'out', from: 'on', y: 'More output from the same resources. Potential real GDP rises.' },
+    { k: 'capital', lvl: 2, t: 'Firms build many new factories and machines.', curve: 'out', from: 'on', y: 'More capital means the economy can make more. Potential real GDP rises.' },
+    { k: 'school', lvl: 2, t: 'Workers get more education and training.', curve: 'out', from: 'on', y: 'More skilled workers can make more. Potential real GDP rises.' },
+    { k: 'laborforce', lvl: 2, t: 'The labor force grows by two million workers.', curve: 'out', from: 'on', y: 'More workers means more can be made. Potential real GDP rises.' },
+    { k: 'storm', lvl: 1, t: 'A hurricane destroys factories, roads, and ports.', curve: 'in', from: 'on', y: 'With less capital, the economy can make less. Potential real GDP falls.' },
+    { k: 'shrink', lvl: 3, t: 'The working-age population shrinks for a decade.', curve: 'in', from: 'on', y: 'Fewer workers means less can be made. Potential real GDP falls.' },
+  ];
+  const PPC_OPTS = ['Shifts out', 'Shifts in', 'No shift'];
+  kind('ppc-move', 'cycle', 'chart', PPC_MOVES, (x) => graphTask({
+    desk: 'cycle', verb: 'chart', lvl: x.lvl, order: 'DOES THE PPC SHIFT?', text: x.t,
+    chart: { kind: 'ppc', dot: x.from, to: x.to || null, curve: x.curve },
+    options: PPC_OPTS.map((label) => ({ label })), answer: x.curve === 'out' ? 0 : x.curve === 'in' ? 1 : 2, why: x.y,
+  }));
+
+  /* Supply and demand. Demand is P = 10 - Q and supply is P = Q, so equilibrium is at 5 and 5. */
+  const SD_EQ = 5;
+  const SD_CONTROLS = [
+    { k: 'rent', lvl: 1, type: 'ceiling', p: 3, t: 'Apartments. The town sets the price ceiling on the graph.' },
+    { k: 'tickets', lvl: 2, type: 'ceiling', p: 7, t: 'Concert tickets. The law sets the price ceiling on the graph.' },
+    { k: 'gas', lvl: 1, type: 'ceiling', p: 3.5, t: 'Gasoline. The state sets the price ceiling on the graph.' },
+    { k: 'wheat', lvl: 1, type: 'floor', p: 7, t: 'Wheat. The government sets the price floor on the graph.' },
+    { k: 'milk', lvl: 2, type: 'floor', p: 3, t: 'Milk. The government sets the price floor on the graph.' },
+    { k: 'sugar', lvl: 1, type: 'floor', p: 6.5, t: 'Sugar. The government sets the price floor on the graph.' },
+    { k: 'minwage', lvl: 2, type: 'floor', p: 7, labor: true, t: 'Summer jobs. The minimum wage is the price floor on the graph.' },
+    { k: 'minwage2', lvl: 2, type: 'floor', p: 3.5, labor: true, t: 'Tutors. The minimum wage is the price floor on the graph.' },
+  ];
+  const sdControlKey = (c) => (c.type === 'ceiling' ? (c.p < SD_EQ ? 'Shortage' : 'No effect') : (c.p > SD_EQ ? 'Surplus' : 'No effect'));
+  const sdControlWhy = (c) => {
+    const key = sdControlKey(c);
+    if (key === 'Shortage') return 'The ceiling is below equilibrium, so it binds. Buyers want more than sellers offer. A shortage.';
+    if (key === 'Surplus') return c.labor ? 'The floor is above the equilibrium wage, so it binds. More people want jobs than firms will hire. A surplus of labor.' : 'The floor is above equilibrium, so it binds. Sellers offer more than buyers want. A surplus.';
+    return c.type === 'ceiling' ? 'The ceiling is above equilibrium, so it does not bind. The market stays at equilibrium.' : 'The floor is below equilibrium, so it does not bind. The market stays at equilibrium.';
+  };
+  kind('sd-control', 'micro', 'chart', SD_CONTROLS, (x) => {
+    const options = plain('Shortage', 'Surplus', 'No effect');
+    return graphTask({
+      desk: 'micro', verb: 'chart', lvl: x.lvl, order: 'FLASHBACK: READ THE GRAPH', text: x.t,
+      chart: { kind: 'sd', control: { type: x.type, p: x.p }, labor: !!x.labor },
+      options, answer: options.findIndex((o) => o.label === sdControlKey(x)), why: sdControlWhy(x),
+    });
+  });
+
+  /* c: which curve. d: +1 shifts right, -1 shifts left. The cause words match the Unit 1 list of shifters. */
+  const SD_SHIFTS = [
+    { k: 'meals', lvl: 1, c: 'D', d: 1, t: 'The market for restaurant meals, a normal good. Incomes rise in an expansion.', y: 'Higher income raises demand for a normal good.' },
+    { k: 'cars', lvl: 1, c: 'D', d: -1, t: 'The market for new cars, a normal good. A recession cuts incomes.', y: 'Lower income cuts demand for a normal good.' },
+    { k: 'tea', lvl: 2, c: 'D', d: 1, t: 'The market for tea. The price of coffee, a substitute, rises.', y: 'Buyers switch from coffee to tea.' },
+    { k: 'buns', lvl: 2, c: 'D', d: -1, t: 'The market for hot dog buns. The price of hot dogs, a complement, rises.', y: 'Fewer hot dogs sold means fewer buns wanted.' },
+    { k: 'sneakers', lvl: 3, c: 'D', d: 1, t: 'The market for sneakers today. Buyers expect the price to jump next month.', y: 'Buyers rush to buy before the price rises.' },
+    { k: 'flour', lvl: 1, c: 'S', d: -1, t: 'The market for bagels. The price of flour rises.', y: 'A higher input cost cuts supply.' },
+    { k: 'ovens', lvl: 1, c: 'S', d: 1, t: 'The market for bagels. New ovens bake twice as many an hour.', y: 'Better technology raises supply.' },
+    { k: 'frost', lvl: 1, c: 'S', d: -1, t: 'The market for oranges. A frost kills part of the crop.', y: 'Less can be brought to market at every price.' },
+    { k: 'shops', lvl: 2, c: 'S', d: 1, t: 'The market for pizza. Five new pizza shops open in town.', y: 'More sellers means more supply.' },
+    { k: 'wages', lvl: 2, c: 'S', d: -1, t: 'The market for bicycles. The wage paid to bicycle factory workers rises.', y: 'A higher input cost cuts supply.' },
+  ];
+  const SD_SHIFT_OPTS = ['Demand shifts right', 'Demand shifts left', 'Supply shifts right', 'Supply shifts left'];
+  const sdShiftResult = (x) => {
+    const up = x.c === 'D' ? x.d > 0 : x.d < 0;          // price rises when demand rises or supply falls
+    const more = x.d > 0;                                 // quantity follows the direction of the shift
+    return `${x.c === 'D' ? 'Demand' : 'Supply'} shifts ${x.d > 0 ? 'right' : 'left'}. Price ${up ? 'rises' : 'falls'} and quantity ${more ? 'rises' : 'falls'}.`;
+  };
+  kind('sd-shift', 'micro', 'chart', SD_SHIFTS, (x) => graphTask({
+    desk: 'micro', verb: 'chart', lvl: x.lvl, order: 'FLASHBACK: WHICH CURVE SHIFTS?', text: x.t,
+    chart: { kind: 'sd', shift: { c: x.c, d: x.d } },
+    options: SD_SHIFT_OPTS.map((label) => ({ label })), answer: (x.c === 'D' ? 0 : 2) + (x.d > 0 ? 0 : 1), why: `${x.y} ${sdShiftResult(x)}`,
+  }));
+
+  /* The inflation rate as a line, one point a year. Each ask is used only where exactly one year fits. */
+  const INFL_LINES = [
+    { k: 'fall', vals: [6, 5, 4, 3, 2] },
+    { k: 'hump', vals: [2, 4, 7, 5, 3] },
+    { k: 'dip', vals: [3, 4, 2, -2, 1] },
+    { k: 'late', vals: [1, 2, 3, 5, -1] },
+    { k: 'slow', vals: [8, 6, 4, 3, 1] },
+    { k: 'wob', vals: [2, 3, 1, 4, 6] },
+  ];
+  const priceLevels = (vals) => { let p = 100; return vals.map((v) => (p *= 1 + v / 100)); };
+  const only = (list) => (list.length === 1 ? list[0] : -1);
+  const idxWhere = (vals, f) => vals.map((v, i) => (f(v, i) ? i : -1)).filter((i) => i >= 0);
+  const INFL_ASKS = [
+    { k: 'fastest', lvl: 1, order: 'TAP THE FASTEST PRICE RISE', ask: 'The line is the inflation rate. Tap the year prices rose fastest.', pick: (v) => only(idxWhere(v, (x) => x === Math.max(...v))), y: () => 'The highest point on the line is the highest inflation rate.' },
+    { k: 'deflation', lvl: 1, order: 'TAP THE YEAR PRICES FELL', ask: 'The line is the inflation rate. Tap the year the price level fell.', pick: (v) => only(idxWhere(v, (x) => x < 0)), y: () => 'Prices fall only when the inflation rate is below zero. That is deflation.' },
+    { k: 'dis', lvl: 2, order: 'TAP THE DISINFLATION YEAR', ask: 'The line is the inflation rate. Disinflation: the rate falls but stays above zero.', pick: (v) => only(idxWhere(v, (x, i) => i > 0 && x > 0 && x < v[i - 1])), y: () => 'The rate fell but stayed above zero. Prices still rose, just more slowly.' },
+    { k: 'level', lvl: 3, order: 'TAP THE HIGHEST PRICE LEVEL', ask: 'The line is the inflation rate. Tap the year the price level was highest.', pick: (v) => { const p = priceLevels(v), top = Math.max(...p); return only(idxWhere(p, (x) => top - x < 0.05)); }, y: (v, a) => (v.every((x) => x > 0) ? `The rate stayed above zero, so prices rose every year.${v[v.length - 1] < Math.max(...v) ? ' A falling line is not falling prices.' : ' The last year is the highest.'}` : a === v.length - 1 ? 'Prices rose in every year but one, and ended at their highest.' : `Prices rose through Year ${a + 1}, then fell in Year ${a + 2}.${a + 2 < v.length ? ' The rise after that did not make up for the fall.' : ''}`) },
+  ];
+  const inflRecs = [];
+  INFL_ASKS.forEach((a) => INFL_LINES.forEach((L) => { const ans = a.pick(L.vals); if (ans >= 0) inflRecs.push({ k: a.k + '-' + L.k, lvl: a.lvl, a, L, ans }); }));
+  kind('infl-line', 'prices', 'chart', inflRecs, (x) => graphTask({
+    desk: 'prices', verb: 'chart', lvl: x.a.lvl, order: x.a.order, ask: x.a.ask,
+    chart: { kind: 'line', pts: x.L.vals.map((v, i) => ({ label: 'Year ' + (i + 1), v })), suf: '%', pickOne: true, prop: x.a.k },
+    options: x.L.vals.map((v, i) => ({ label: 'Year ' + (i + 1) })), answer: x.ans, why: x.a.y(x.L.vals, x.ans),
+  }, x.a.k === 'level' ? 8 : 1));
+  B.GRAPHS = { PPC_LAYOUTS, PPC_ASKS, PPC_MOVES, SD_EQ, SD_CONTROLS, SD_SHIFTS, INFL_LINES };
 
   if (inNode) module.exports = B;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -4910,6 +5101,15 @@ body.answered .keypad { display: none; }
     },
     chart(t, o) {
       const c = t.chart;
+      if (c.kind === 'ppc' || c.kind === 'sd' || c.kind === 'line') {
+        const svg = c.kind === 'ppc' ? ppcSVG(t) : c.kind === 'sd' ? sdSVG(t) : lineSVG(t);
+        const controls = c.pickOne || t.options.length === 3
+          ? `<div class="tk-controls points n${t.options.length}">${t.options.map((b, i) => `<button type="button" class="opt pointbtn" data-act="pick" data-i="${i}" data-key="${i + 1}"><span class="opt-label">${esc(b.label)}</span></button>`).join('')}</div>`
+          : `<div class="tk-controls bins n${t.options.length}">${t.options.map((b, i) => optBtn(i, b.label, '')).join('')}</div>`;
+        return t.text
+          ? `<div class="tk-body flow-body graph-body">${formHTML(`<p class="form-text">${esc(t.text)}</p>`, 'mini')}${svg}</div>${controls}`
+          : `<div class="tk-body chart-body">${svg}</div>${controls}`;
+      }
       if (c.kind === 'cycle') {
         const lit = c.pickOne ? '' : 'lit';
         const controls = c.pickOne
@@ -5142,6 +5342,113 @@ body.answered .keypad { display: none; }
     </svg>`;
   }
 
+  /* ---------- graphs added Nov 17, 2026: the PPC, supply and demand, and a line of the inflation rate ----------
+     The PPC and supply and demand share one frame: the axis names sit at the ends of the axes, so the space beside
+     the axes is free for P and Q labels. What moves after the answer is moved by CSS on .chart.revealed. */
+  function graphFrame() {
+    const phone = window.innerWidth < 620;
+    const W = phone ? 400 : 520, H = phone ? 300 : 330;
+    return { W, H, L: 46, R: W - 34, T: 30, Bm: H - 32 };
+  }
+  const frameAxes = (f, yName, xName) => `<line class="axis" x1="${f.L}" y1="${f.T - 8}" x2="${f.L}" y2="${f.Bm}"/><line class="axis" x1="${f.L}" y1="${f.Bm}" x2="${f.R + 10}" y2="${f.Bm}"/>
+      <text class="ax" x="6" y="${f.T - 12}">${esc(yName)}</text><text class="ax" x="${f.R + 28}" y="${f.Bm + 23}" text-anchor="end">${esc(xName)}</text>`;
+  const tapMark = (i, X, Y, num, r) => `<g class="mk tap" data-mk="${i}" data-act="pick" data-i="${i}" role="button" aria-label="${esc(num.aria)}"><circle class="mk-hit" cx="${X.toFixed(1)}" cy="${Y.toFixed(1)}" r="${r + 9}"/><circle class="mk-dot" cx="${X.toFixed(1)}" cy="${Y.toFixed(1)}" r="${r}"/>${num.text ? `<text class="mk-num" x="${X.toFixed(1)}" y="${(Y + 6.5).toFixed(1)}" text-anchor="middle">${num.text}</text>` : ''}</g>`;
+
+  /* The PPC is a quarter circle of radius 1. Inside it is a recession, on it is potential real GDP. */
+  const PPC_START = { on: [0.7071, 0.7071], inside: [0.42, 0.42] };
+  const PPC_GROW = { out: 1.2, in: 0.8 };
+  function ppcSVG(t) {
+    const f = graphFrame(), c = t.chart, M = 1.3;
+    const X = (x) => f.L + (x / M) * (f.R - f.L), Y = (y) => f.Bm - (y / M) * (f.Bm - f.T);
+    const arc = (r, cls, style) => `<path class="${cls}"${style ? ` style="${style}"` : ''} d="M${X(0).toFixed(1)},${Y(r).toFixed(1)} A${(X(r) - X(0)).toFixed(1)} ${(Y(0) - Y(r)).toFixed(1)} 0 0 1 ${X(r).toFixed(1)},${Y(0).toFixed(1)}"/>`;
+    let inner = '';
+    if (c.pickOne) {
+      inner = arc(1, 'curve') + `<text class="lab" x="${(X(1) + 8).toFixed(1)}" y="${(Y(0.1)).toFixed(1)}">PPC</text>`
+        + c.points.map((p, i) => tapMark(i, X(p.x), Y(p.y), { text: i + 1, aria: 'Point ' + (i + 1) }, 17)).join('');
+    } else {
+      const [sx, sy] = PPC_START[c.dot];
+      const grow = c.curve ? PPC_GROW[c.curve] : 1;
+      const end = c.to ? PPC_START[c.to] : [sx * grow, sy * grow];
+      const dx = X(end[0]) - X(sx), dy = Y(end[1]) - Y(sy);
+      inner = (c.curve ? arc(1, 'curve was') : '')
+        + arc(1, `curve${c.curve ? ' grows' : ''}`, c.curve ? `--grow:${grow};transform-origin:${X(0).toFixed(1)}px ${Y(0).toFixed(1)}px` : '')
+        + `<text class="lab" x="${(X(1) + 8).toFixed(1)}" y="${Y(0.1).toFixed(1)}">PPC</text>`
+        + (c.curve ? `<text class="lab late go" x="${(f.L + 12).toFixed(1)}" y="${(Y(grow) + 24).toFixed(1)}">New PPC</text>` : '')
+        + `<circle class="ghost late" cx="${X(sx).toFixed(1)}" cy="${Y(sy).toFixed(1)}" r="12"/>`
+        + `<g class="econ moves" style="--dx:${dx.toFixed(1)}px;--dy:${dy.toFixed(1)}px"><circle class="econ-dot" cx="${X(sx).toFixed(1)}" cy="${Y(sy).toFixed(1)}" r="12"/>${c.curve === 'in' ? `<text class="lab" x="${(X(sx) - 17).toFixed(1)}" y="${(Y(sy) + 24).toFixed(1)}" text-anchor="end">Economy</text>` : `<text class="lab" x="${(X(sx) + 18).toFixed(1)}" y="${(Y(sy) + 6).toFixed(1)}">Economy</text>`}</g>`;
+    }
+    return `<svg class="chart graph ppc" viewBox="0 0 ${f.W} ${f.H}" role="img" aria-label="A production possibilities curve. Capital goods are on the side axis and consumer goods are on the bottom axis.">
+      ${frameAxes(f, 'Capital goods', 'Consumer goods')}${inner}</svg>`;
+  }
+
+  /* Supply and demand. Demand is P = 10 - Q, supply is P = Q, equilibrium is 5 and 5. */
+  let sdId = 0;
+  function sdSVG(t) {
+    const f = graphFrame(), c = t.chart, id = 'sdclip' + (++sdId);
+    const X = (q) => f.L + (q / 10) * (f.R - f.L), Y = (p) => f.Bm - (p / 10) * (f.Bm - f.T);
+    const lo = c.shift ? 2.2 : 1.6, hi = 10 - lo;
+    const dPath = `M${X(lo).toFixed(1)},${Y(hi).toFixed(1)} L${X(hi).toFixed(1)},${Y(lo).toFixed(1)}`;
+    const sPath = `M${X(lo).toFixed(1)},${Y(lo).toFixed(1)} L${X(hi).toFixed(1)},${Y(hi).toFixed(1)}`;
+    const dLab = (n, cls) => `<text class="lab dem-t ${cls || ''}" x="${(X(hi) + 7).toFixed(1)}" y="${(Y(lo) + 6).toFixed(1)}">D${n}</text>`;
+    const sLab = (n, cls) => `<text class="lab sup-t ${cls || ''}" x="${(X(hi) + 7).toFixed(1)}" y="${(Y(hi) + 6).toFixed(1)}">S${n}</text>`;
+    const sub = (n) => `<tspan class="late" font-size="12" dy="4">${n}</tspan>`;
+    const guide = (q, p, n, cls) => `<g class="${cls}"><path class="guide" d="M${f.L},${Y(p).toFixed(1)} H${X(q).toFixed(1)} V${f.Bm}"/><text class="lab" x="${f.L - 6}" y="${(Y(p) + 6).toFixed(1)}" text-anchor="end">P${n}</text><text class="lab" x="${X(q).toFixed(1)}" y="${f.Bm + 21}" text-anchor="middle">Q${n}</text></g>`;
+    let inner = '', curves = '';
+    if (c.shift) {
+      const a = c.shift.d * 2, px = (a / 10) * (f.R - f.L);
+      const isD = c.shift.c === 'D';
+      const q2 = 5 + a / 2, p2 = isD ? 5 + a / 2 : 5 - a / 2;
+      const still = isD ? `<path class="curve sup" d="${sPath}"/>${sLab('')}` : `<path class="curve dem" d="${dPath}"/>${dLab('')}`;
+      const was = isD ? `<path class="curve dem was" d="${dPath}"/><text class="lab dem-t" x="${(X(hi) + 7).toFixed(1)}" y="${(Y(lo) + 6).toFixed(1)}">D${sub(1)}</text>` : `<path class="curve sup was" d="${sPath}"/><text class="lab sup-t" x="${(X(hi) + 7).toFixed(1)}" y="${(Y(hi) + 6).toFixed(1)}">S${sub(1)}</text>`;
+      const mover = `<g class="slides" style="--dx:${px.toFixed(1)}px"><path class="curve ${isD ? 'dem' : 'sup'}" d="${isD ? dPath : sPath}"/><text class="lab ${isD ? 'dem-t' : 'sup-t'} late" x="${(X(hi) + 7).toFixed(1)}" y="${((isD ? Y(lo) : Y(hi)) + 6).toFixed(1)}">${isD ? 'D' : 'S'}<tspan font-size="12" dy="4">2</tspan></text></g>`;
+      curves = `${still}${was}${mover}`;
+      inner = `${guide(5, 5, sub(1), '')}${guide(q2, p2, '<tspan font-size="12" dy="4">2</tspan>', 'late')}`;
+      curves += `<circle class="eq" cx="${X(5).toFixed(1)}" cy="${Y(5).toFixed(1)}" r="7"/><circle class="eq new late" cx="${X(q2).toFixed(1)}" cy="${Y(p2).toFixed(1)}" r="8"/>`;
+    } else {
+      const k = c.control, y = Y(k.p), binds = k.type === 'ceiling' ? k.p < 5 : k.p > 5;
+      const name = c.labor ? 'Minimum wage' : k.type === 'ceiling' ? 'Price ceiling' : 'Price floor';
+      const above = k.p > 5;
+      const qd = 10 - k.p, qs = k.p, x1 = X(Math.min(qd, qs)), x2 = X(Math.max(qd, qs));
+      const by = above ? y - 13 : y + 13;
+      const result = binds
+        ? `<g class="late"><path class="bracket" d="M${x1.toFixed(1)},${(by + (above ? 7 : -7)).toFixed(1)} V${by.toFixed(1)} H${x2.toFixed(1)} V${(by + (above ? 7 : -7)).toFixed(1)}"/><text class="lab" x="${((x1 + x2) / 2).toFixed(1)}" y="${(above ? by - 8 : by + 19).toFixed(1)}" text-anchor="middle">${above ? 'Surplus' : 'Shortage'}</text>
+            <circle class="eq new" cx="${X(qd).toFixed(1)}" cy="${y.toFixed(1)}" r="6"/><circle class="eq new" cx="${X(qs).toFixed(1)}" cy="${y.toFixed(1)}" r="6"/>
+            <path class="guide" d="M${X(qd).toFixed(1)},${y.toFixed(1)} V${f.Bm}"/><path class="guide" d="M${X(qs).toFixed(1)},${y.toFixed(1)} V${f.Bm}"/>
+            <text class="lab" x="${X(qd).toFixed(1)}" y="${f.Bm + 21}" text-anchor="middle">Qd</text><text class="lab" x="${X(qs).toFixed(1)}" y="${f.Bm + 21}" text-anchor="middle">Qs</text></g>`
+        : `<g class="late"><circle class="ring" cx="${X(5).toFixed(1)}" cy="${Y(5).toFixed(1)}" r="15"/><text class="lab" x="${(X(5) + 30).toFixed(1)}" y="${(Y(5) + 6).toFixed(1)}">Stays here</text></g>`;
+      inner = `<path class="curve dem" d="${dPath}"/>${dLab('')}<path class="curve sup" d="${sPath}"/>${sLab('')}
+        <line class="control" x1="${f.L}" x2="${f.W - 8}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>
+        <text class="lab" x="${f.W - 8}" y="${(above ? y + 21 : y - 9).toFixed(1)}" text-anchor="end">${name}</text>
+        <circle class="eq" cx="${X(5).toFixed(1)}" cy="${Y(5).toFixed(1)}" r="7"/>${result}`;
+    }
+    const yName = c.labor ? 'Wage' : 'Price', xName = c.labor ? 'Workers' : 'Quantity';
+    return `<svg class="chart graph sd" viewBox="0 0 ${f.W} ${f.H}" role="img" aria-label="A supply and demand graph. Demand slopes down and supply slopes up.">
+      <defs><clipPath id="${id}"><rect x="${f.L}" y="${f.T - 10}" width="${f.R - f.L + 34}" height="${f.Bm - f.T + 10}"/></clipPath></defs>
+      ${frameAxes(f, yName, xName)}${inner}<g clip-path="url(#${id})">${curves}</g></svg>`;
+  }
+
+  /* One point a year, joined by a line, with the number on every point and a line at zero. */
+  function lineSVG(t) {
+    chartSize();
+    const pts = t.chart.pts, vals = pts.map((p) => p.v);
+    const hi = Math.max(...vals, 0), lo = Math.min(...vals, 0);
+    const top = CT + 30, bottom = CH - CB - (lo < 0 ? 30 : 4);
+    const y = (v) => bottom - (v - lo) / ((hi - lo) || 1) * (bottom - top);
+    const n = pts.length, slot = (CW - CL - CR) / n;
+    const x = (i) => CL + slot * i + slot / 2;
+    const num = (v) => `${v < 0 ? B.MINUS : ''}${Math.abs(v)}${t.chart.suf || ''}`;
+    const path = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p.v).toFixed(1)}`).join(' ');
+    const marks = pts.map((p, i) => tapMark(i, x(i), y(p.v), { text: '', aria: p.label }, 12)
+      + `<text class="bar-val" x="${x(i).toFixed(1)}" y="${(p.v < 0 ? y(p.v) + 32 : y(p.v) - 19).toFixed(1)}" text-anchor="middle">${esc(num(p.v))}</text>`).join('');
+    const ticks = pts.map((p, i) => `<text class="ax" x="${x(i).toFixed(1)}" y="${CH - 12}" text-anchor="middle">${esc(p.label)}</text>`).join('');
+    return `<svg class="chart graph linechart" viewBox="0 0 ${CW} ${CH}" role="img" aria-label="A line chart of the inflation rate, one point for each of ${n} years.">
+      <line class="axis" x1="${CL}" y1="${CT}" x2="${CL}" y2="${CH - CB}"/><line class="axis zero" x1="${CL}" y1="${y(0).toFixed(1)}" x2="${CW - CR}" y2="${y(0).toFixed(1)}"/>
+      <text class="ax" transform="translate(16 ${(CH - CB) / 2 + 6}) rotate(-90)" text-anchor="middle">Inflation rate</text>
+      ${lo < 0 ? `<text class="ax" x="${CL - 6}" y="${(y(0) + 5).toFixed(1)}" text-anchor="end">0</text>` : ''}
+      <path class="trend" d="${path}"/>${marks}${ticks}
+    </svg>`;
+  }
+
   /* ---------- circular flow: same geometry as the review sheet. Inner loop real, outer loop money. ---------- */
   const FLOW_PATHS = [
     'M520 130 L520 80 L120 80 L120 130',
@@ -5351,7 +5658,7 @@ body.answered .keypad { display: none; }
       case 'wave': return 'See the green part of the wave';
       case 'frq': return t.blanks.map((b) => b.options[b.answer]).join(', ');
       case 'label': { const st = t.steps[Math.min(Run.li, t.steps.length - 1)]; return t.options[st.answer].label; }
-      case 'chart': if (t.chart.pickOne) return `Point ${t.answer + 1}${t.options[t.answer].meaning ? ': ' + t.options[t.answer].meaning : ''}`; return t.options[t.answer].label;
+      case 'chart': if (t.chart.pickOne && t.chart.kind === 'cycle') return `Point ${t.answer + 1}${t.options[t.answer].meaning ? ': ' + t.options[t.answer].meaning : ''}`; return t.options[t.answer].label;
       default: return t.options[t.answer].label;
     }
   }
@@ -5410,7 +5717,7 @@ body.answered .keypad { display: none; }
       t.options.forEach((o, i) => {
         const el = $(`.chip[data-i="${i}"]`); if (!el) return;
         if (i !== t.answer && !el.classList.contains('is-wrong')) el.classList.add('is-other');
-        const tag = $('.chip-tag', el); if (tag) tag.textContent = o.tag || '';
+        const tag = $('.chip-tag', el); if (tag) tag.textContent = o.note || o.tag || '';
       });
     }
     if (t.verb === 'order') {
@@ -5498,7 +5805,7 @@ body.answered .keypad { display: none; }
     }
     if (t.verb === 'chart') {
       const svg = $('.chart'); if (svg) svg.classList.add('revealed');
-      if (t.chart.kind === 'cycle' && t.chart.pickOne) { const m = $(`.mk[data-mk="${t.answer}"]`); if (m) m.classList.add('is-right'); }
+      if (t.chart.pickOne && t.chart.kind !== 'base') { const m = $(`.mk[data-mk="${t.answer}"]`); if (m) m.classList.add('is-right'); }
     }
   }
   /* wave: where the right zones are, drawn behind the curve */

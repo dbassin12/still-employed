@@ -780,3 +780,121 @@ test('calculator: payday real pay typed on the calculator matches the key', () =
     assert.equal(Math.round(typed / 10) * 10, B.realPayOf(pay, cpi), `${pay} at CPI ${cpi}`);
   }
 });
+
+/* ---------- which one is different (was: odd one out) ---------- */
+test('which one is different: every prompt says what is being sorted and names the groups', () => {
+  for (const seed of [1, 2, 3]) {
+    for (const t of B.everyTask(seed).filter((x) => x.verb === 'oddone')) {
+      assert.equal(t.order, 'WHICH ONE IS DIFFERENT?', t.id);
+      assert.ok(!/go together/i.test(t.ask), `${t.id}: the old prompt did not say what to sort by`);
+      assert.match(t.ask, /^(Each|None of these|The Bureau counts each|Surprise inflation hits\. Each|The price goes up\. For each)/, `${t.id}: ${t.ask}`);
+      assert.match(t.ask, /Tap the (one|line)/, t.id);
+      assert.ok(!/undefined/.test(t.ask + t.why), t.id);
+      t.options.forEach((o) => assert.ok(o.note && o.note.length <= 60, `${t.id}: note ${o.note}`));
+      // the reason names both groups
+      assert.match(t.why, /^(That (one|line)|Demand for that one) .+\. (The other three|Demand for the other three) /, `${t.id}: ${t.why}`);
+    }
+  }
+});
+
+/* ---------- graphs added Nov 17, 2026 ---------- */
+const graphTasks = (kindId) => every.filter((t) => t.kind === kindId);
+test('PPC tap: exactly one point fits, measured from the curve', () => {
+  const list = graphTasks('ppc-tap');
+  assert.ok(list.length >= 15, 'only ' + list.length);
+  for (const t of list) {
+    const where = t.chart.points.map((p) => { const d = Math.hypot(p.x, p.y); return d < 0.85 ? 'inside' : d > 1.12 ? 'outside' : Math.abs(d - 1) < 0.01 ? 'on' : 'unclear'; });
+    assert.ok(!where.includes('unclear'), `${t.id}: a point sits too close to the curve to call`);
+    const fits = where.map((w, i) => (w === t.chart.prop ? i : -1)).filter((i) => i >= 0);
+    assert.deepEqual(fits, [t.answer], `${t.id}: ${where}`);
+    t.chart.points.forEach((p, i) => {
+      assert.ok(p.x > 0.15 && p.y > 0.15 && p.x <= 1.2 && p.y <= 1.2, `${t.id}: point ${i + 1} is off the graph`);
+      t.chart.points.forEach((q, j) => { if (j > i) assert.ok(Math.hypot(p.x - q.x, p.y - q.y) >= 0.25, `${t.id}: points ${i + 1} and ${j + 1} are too close to tap`); });
+    });
+    const want = { inside: /recession|cyclical|negative output gap/i, on: /equals potential|natural rate/i, outside: /cannot reach/i }[t.chart.prop];
+    assert.match(t.ask, want, t.id);
+  }
+});
+test('PPC shift: only more or fewer resources or technology move the curve; the cycle moves the dot', () => {
+  const list = graphTasks('ppc-move');
+  assert.ok(list.length >= 10, 'only ' + list.length);
+  assert.deepEqual(list[0].options.map((o) => o.label), ['Shifts out', 'Shifts in', 'No shift']);
+  for (const t of list) {
+    const c = t.chart;
+    const cycleWords = /recession|laid-off|unemployment/i.test(t.text), growthWords = /technology|factories|education|labor force|population|hurricane/i.test(t.text);
+    assert.ok(cycleWords !== growthWords, `${t.id}: the scenario should be a cycle story or a growth story, not both: ${t.text}`);
+    if (cycleWords) {
+      assert.equal(c.curve, null, t.id); assert.equal(t.options[t.answer].label, 'No shift', t.id);
+      assert.ok(c.to && c.to !== c.dot, `${t.id}: the dot has to move`);
+      const worse = /hits|lay off|rises/i.test(t.text);
+      assert.equal(c.to, worse ? 'inside' : 'on', `${t.id}: ${t.text}`);
+    } else {
+      const less = /destroys|shrinks/i.test(t.text);
+      assert.equal(c.curve, less ? 'in' : 'out', t.id);
+      assert.equal(t.options[t.answer].label, less ? 'Shifts in' : 'Shifts out', t.id);
+      assert.equal(c.dot, 'on', t.id); assert.equal(c.to, null, t.id);
+      assert.match(t.why, less ? /Potential real GDP falls/ : /Potential real GDP rises/, t.id);
+    }
+  }
+});
+test('supply and demand, price controls: the key is worked out from quantity demanded and supplied at the legal price', () => {
+  const list = graphTasks('sd-control');
+  assert.ok(list.length >= 8, 'only ' + list.length);
+  const seen = new Set();
+  for (const t of list) {
+    const k = t.chart.control, eq = 5;
+    assert.ok(Math.abs(k.p - eq) >= 1.4, `${t.id}: the line is too close to equilibrium to read`);
+    const price = k.type === 'ceiling' ? Math.min(k.p, eq) : Math.max(k.p, eq);   // the price the market ends up at
+    const qd = 10 - price, qs = price;
+    const key = qd > qs ? 'Shortage' : qs > qd ? 'Surplus' : 'No effect';
+    assert.equal(t.options[t.answer].label, key, `${t.id}: Qd ${qd}, Qs ${qs}`);
+    assert.match(t.text, k.type === 'ceiling' ? /price ceiling/ : /price floor/, t.id);
+    assert.match(t.why, key === 'No effect' ? /does not bind/ : /binds/, t.id);
+    seen.add(k.type + key);
+  }
+  assert.equal(seen.size, 4, 'need a binding and a non-binding ceiling and floor: ' + [...seen]);
+});
+test('supply and demand, shifts: the new equilibrium is solved, and the words match it', () => {
+  const list = graphTasks('sd-shift');
+  assert.ok(list.length >= 10, 'only ' + list.length);
+  const seen = new Set();
+  for (const t of list) {
+    const s = t.chart.shift, a = s.d * 2;
+    const aD = s.c === 'D' ? a : 0, aS = s.c === 'S' ? a : 0;
+    // demand: P = 10 - (Q - aD). supply: P = Q - aS.
+    const Q = (10 + aD + aS) / 2, P = Q - aS;
+    assert.ok(Math.abs(10 - (Q - aD) - P) < 1e-9, t.id);
+    const label = `${s.c === 'D' ? 'Demand' : 'Supply'} shifts ${s.d > 0 ? 'right' : 'left'}`;
+    assert.equal(t.options[t.answer].label, label, t.id);
+    assert.ok(t.why.includes(`${label}. Price ${P > 5 ? 'rises' : 'falls'} and quantity ${Q > 5 ? 'rises' : 'falls'}.`), `${t.id}: ${t.why}`);
+    // the cause words belong to the curve that moves
+    const demandCause = /incomes|substitute|complement|Buyers expect/i.test(t.text), supplyCause = /price of flour|ovens|frost|shops open|wage paid/i.test(t.text);
+    assert.ok(demandCause !== supplyCause, `${t.id}: ${t.text}`);
+    assert.equal(s.c, demandCause ? 'D' : 'S', `${t.id}: ${t.text}`);
+    seen.add(s.c + s.d);
+  }
+  assert.equal(seen.size, 4, 'need all four shifts');
+});
+test('inflation line: one year fits each ask, recomputed from the rates', () => {
+  const list = graphTasks('infl-line');
+  assert.ok(list.length >= 14, 'only ' + list.length);
+  for (const t of list) {
+    const v = t.chart.pts.map((p) => p.v);
+    assert.equal(v.length, 5, t.id);
+    let fits;
+    if (t.chart.prop === 'fastest') fits = v.map((x, i) => (v.every((y) => y <= x) ? i : -1));
+    else if (t.chart.prop === 'deflation') fits = v.map((x, i) => (x < 0 ? i : -1));
+    else if (t.chart.prop === 'dis') fits = v.map((x, i) => (i > 0 && x > 0 && x < v[i - 1] ? i : -1));
+    else {
+      const level = []; let p = 100;
+      for (const x of v) { p = p * (100 + x) / 100; level.push(p); }
+      const top = Math.max(...level);
+      fits = level.map((x, i) => (x === top ? i : -1));
+      const runnerUp = Math.max(...level.filter((x) => x !== top));
+      assert.ok(top - runnerUp >= 0.5, `${t.id}: the two highest price levels are too close: ${level.map((x) => x.toFixed(2))}`);
+    }
+    assert.deepEqual(fits.filter((i) => i >= 0), [t.answer], `${t.id}: ${v}`);
+    assert.equal(t.options[t.answer].label, 'Year ' + (t.answer + 1), t.id);
+  }
+  assert.ok(list.some((t) => t.chart.prop === 'level' && t.chart.pts.every((p, i, a) => p.v > 0 && (i === 0 || p.v < a[i - 1].v)) && t.answer === 4), 'need the falling line where prices still end highest');
+});

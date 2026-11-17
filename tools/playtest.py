@@ -710,7 +710,7 @@ def real_inputs(b, size):
     """Real taps and keys on every kind of question: the right target counts as right, the wrong one as wrong."""
     ctx, page = new_page(b, size, tag=f'inputs-{size}', reduced=True)
     picks = page.evaluate("""() => { const out = {}; window.__se.B.everyTask(5).forEach(t => {
-        const key = t.verb + (t.verb === 'chart' ? '-' + t.chart.kind + (t.chart.pickOne ? '-tap' : '') + (t.chart.pickLine ? '-line' : '') : '') + (t.verb === 'label' ? '-' + t.diagram : '');
+        const key = t.verb + (t.verb === 'chart' ? '-' + t.chart.kind + (t.chart.pickOne ? '-tap' : '') + (t.chart.pickLine ? '-line' : '') + (t.chart.shift ? '-shift' : '') + (t.chart.control ? '-control' : '') : '') + (t.verb === 'label' ? '-' + t.diagram : '');
         out[key] = out[key] || t.id; }); return out; }""")
     click = lambda sel: page.locator(sel).first.click(timeout=2500, force=True)
     for key, tid in picks.items():
@@ -837,7 +837,7 @@ def real_inputs(b, size):
                         click(f'.chip[data-i="{w}"]')
                 else:
                     i = ans if mode == 'right' else (ans + 1) % n
-                    if verb == 'chart' and t['chart']['kind'] == 'cycle' and t['chart'].get('pickOne'):
+                    if verb == 'chart' and t['chart']['kind'] in ('cycle', 'ppc', 'line') and t['chart'].get('pickOne'):
                         page.locator(f'.mk[data-i="{i}"] .mk-hit').click(timeout=2500, force=True)
                     elif verb == 'flow':
                         page.locator(f'.arrow[data-i="{i}"] .arrow-badge').click(timeout=2500, force=True)

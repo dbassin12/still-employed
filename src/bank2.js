@@ -371,27 +371,42 @@
     });
   });
 
-  /* ================= odd one out ================= */
+  /* ================= which one is different ================= */
+  /* Every one of these says what the four things are being sorted by and names the possible groups,
+     so a student is never guessing the rule. The reveal names each group in full. */
   const short = (s) => s.length <= 46;
+  const PART = { C: 'consumption (C)', I: 'investment (I)', G: 'government purchases (G)', Xn: 'net exports (Xn)' };
+  const LEFT_OUT = { used: 'a used good', intermediate: 'an intermediate good', financial: 'a stock or bond', transfer: 'a transfer', abroad: 'made abroad' };
+  const LEFT_OUT3 = { used: 'used goods', intermediate: 'intermediate goods', financial: 'stocks and bonds', transfer: 'transfers', abroad: 'made abroad' };
+  const binNote = (k) => `${B.BIN[k].label}: ${B.BIN[k].def}`;
+  const SAME = 'Three are the same. Tap the one that is different.';
+  const gdpNot = (a, b) => {
+    const aIn = !!PART[a], bIn = !!PART[b];
+    if (!aIn && !bIn) return { ask: 'None of these count in U.S. GDP. Three are left out for the same reason. Tap the one left out for a different reason.', why: `That one is ${LEFT_OUT[b]}. The other three are ${LEFT_OUT3[a]}.` };
+    const ask = `Each one either counts in U.S. GDP or does not. ${SAME}`;
+    if (aIn) return { ask, why: `That one does not count: it is ${LEFT_OUT[b]}. The other three count as ${PART[a]}.` };
+    return { ask, why: `That one counts as ${PART[b]}. The other three do not count: they are ${LEFT_OUT3[a]}.` };
+  };
+  const lower = (s) => s.charAt(0).toLowerCase() + s.slice(1);
   const ODD = [
-    ...[['C', 'I'], ['I', 'C'], ['G', 'C'], ['C', 'G'], ['I', 'G'], ['G', 'I'], ['Xn', 'C'], ['C', 'Xn'], ['Xn', 'I'], ['I', 'Xn'], ['G', 'Xn'], ['Xn', 'G']].map(([a, b]) => ({ d: 'gdp', lvl: 2, label: (g) => g.s, group: (k) => GDP.filter((g) => g.line === k && g.lvl <= 2), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['transfer', 'G'], ['G', 'transfer'], ['used', 'C'], ['C', 'used'], ['financial', 'I'], ['I', 'financial'], ['intermediate', 'C'], ['abroad', 'C'], ['C', 'abroad'], ['used', 'financial'], ['transfer', 'used']].map(([a, b]) => ({ d: 'gdp', lvl: 2, label: (g) => g.s, group: (k) => GDP.filter((g) => (g.line === k || g.no === k) && g.lvl <= 2 && !((a === 'G' || b === 'G') && /gift/i.test(g.s))), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['E', 'U'], ['U', 'E'], ['N', 'E'], ['E', 'N'], ['U', 'N'], ['N', 'U'], ['E', 'U'], ['U', 'N'], ['N', 'E']].map(([a, b], i) => ({ d: 'jobs', lvl: 1, label: (p) => p.s, group: (k) => PEOPLE.filter((p) => p.st === k), tag: (k) => B.BIN[k].label, a, b, tagKey: i })),
-    ...[['gains', 'loses'], ['loses', 'gains'], ['protected', 'loses'], ['loses', 'protected'], ['gains', 'protected'], ['protected', 'gains']].map(([a, b]) => ({ d: 'costs', lvl: 1, ask: 'Surprise inflation hits. Three go together. Tap the one that does not.', why: `That one ${{ gains: 'gains', loses: 'loses', protected: 'is protected' }[b]}. The other three ${{ gains: 'gain', loses: 'lose', protected: 'are protected' }[a]}.`, label: (e) => e.s, group: (k) => EFFECTS.filter((e) => e.key === k), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['out', 'in'], ['in', 'out'], ['out', 'in'], ['in', 'out'], ['out', 'in'], ['in', 'out']].map(([a, b]) => ({ d: 'gdp', lvl: 1, label: (l) => l.s, group: (k) => LOOP.filter((l) => l.dir === k), tag: (k) => (k === 'out' ? 'Leaves the loop' : 'Comes into the loop'), a, b })),
-    ...[['Real', 'Nominal'], ['Nominal', 'Real'], ['Real', 'Nominal'], ['Nominal', 'Real']].map(([a, b]) => ({ d: 'real', lvl: 1, ask: 'All four describe GDP. Three go together. Tap the one that does not.', label: (x) => x.t, group: (k) => REALNOM.filter((x) => x.key === k && short(x.t) && !/\b(pay|rate|raise)\b/i.test(x.t)), tag: (k) => k, a, b })),
-    ...[['dis', 'de'], ['de', 'dis'], ['rising', 'de'], ['dis', 'rising'], ['rising', 'dis'], ['de', 'rising']].map(([a, b]) => ({ d: 'prices', lvl: 2, label: (x) => x.t, group: (k) => NAMEIT.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['expansion', 'contraction'], ['contraction', 'expansion'], ['expansion', 'contraction'], ['contraction', 'expansion']].map(([a, b]) => ({ d: 'cycle', lvl: 1, label: (x) => x.t, group: (k) => PHASES.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['menu', 'shoe'], ['shoe', 'menu']].map(([a, b]) => ({ d: 'costs', lvl: 2, label: (x) => x.t, group: (k) => COSTS.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, a, b })),
-    ...[['Elastic', 'Inelastic'], ['Inelastic', 'Elastic']].map(([a, b]) => ({ d: 'micro', lvl: 1, ask: 'Think about how buyers respond to a price change. Three go together. Tap the one that does not.', label: (x) => x.t, group: (k) => MICRO_ELASTIC.filter((x) => x.key === k && !/%/.test(x.t)), tag: (k) => k, a, b })),
+    ...[['C', 'I'], ['I', 'C'], ['G', 'C'], ['C', 'G'], ['I', 'G'], ['G', 'I'], ['Xn', 'C'], ['C', 'Xn'], ['Xn', 'I'], ['I', 'Xn'], ['G', 'Xn'], ['Xn', 'G']].map(([a, b]) => ({ d: 'gdp', lvl: 2, ask: 'Each one counts in GDP as C, I, G, or Xn. Three are the same part. Tap the one that is a different part.', why: `That one is ${PART[b]}. The other three are ${PART[a]}.`, label: (g) => g.s, group: (k) => GDP.filter((g) => g.line === k && g.lvl <= 2), tag: (k) => B.BIN[k].label, note: binNote, a, b })),
+    ...[['transfer', 'G'], ['G', 'transfer'], ['used', 'C'], ['C', 'used'], ['financial', 'I'], ['I', 'financial'], ['intermediate', 'C'], ['abroad', 'C'], ['C', 'abroad'], ['used', 'financial'], ['transfer', 'used']].map(([a, b]) => Object.assign({ d: 'gdp', lvl: 2, label: (g) => g.s, group: (k) => GDP.filter((g) => (g.line === k || g.no === k) && g.lvl <= 2 && !((a === 'G' || b === 'G') && /gift/i.test(g.s))), tag: (k) => B.BIN[k].label, note: (k) => (PART[k] ? `Counts as ${B.BIN[k].label}` : `Not counted: ${lower(B.BIN[k].label)}`), a, b }, gdpNot(a, b))),
+    ...[['E', 'U'], ['U', 'E'], ['N', 'E'], ['E', 'N'], ['U', 'N'], ['N', 'U'], ['E', 'U'], ['U', 'N'], ['N', 'E']].map(([a, b], i) => ({ d: 'jobs', lvl: 1, ask: `The Bureau counts each person as employed, unemployed, or not in the labor force. Three get the same label. Tap the one who gets a different label.`, why: `That one is ${lower(B.BIN[b].label)}. The other three are ${lower(B.BIN[a].label)}.`, label: (p) => p.s, group: (k) => PEOPLE.filter((p) => p.st === k), tag: (k) => B.BIN[k].label, a, b, tagKey: i })),
+    ...[['gains', 'loses'], ['loses', 'gains'], ['protected', 'loses'], ['loses', 'protected'], ['gains', 'protected'], ['protected', 'gains']].map(([a, b]) => ({ d: 'costs', lvl: 1, ask: 'Surprise inflation hits. Each one gains, loses, or is protected. Three get the same result. Tap the one that gets a different result.', why: `That one ${{ gains: 'gains', loses: 'loses', protected: 'is protected' }[b]}. The other three ${{ gains: 'gain', loses: 'lose', protected: 'are protected' }[a]}.`, label: (e) => e.s, group: (k) => EFFECTS.filter((e) => e.key === k), tag: (k) => B.BIN[k].label, a, b })),
+    ...[['out', 'in'], ['in', 'out'], ['out', 'in'], ['in', 'out'], ['out', 'in'], ['in', 'out']].map(([a, b]) => ({ d: 'gdp', lvl: 1, ask: `Each one either takes money out of the circular flow or puts money into it. ${SAME}`, why: `That one ${b === 'out' ? 'takes money out of the loop' : 'puts money into the loop'}. The other three ${a === 'out' ? 'take money out' : 'put money in'}.`, label: (l) => l.s, group: (k) => LOOP.filter((l) => l.dir === k), tag: (k) => (k === 'out' ? 'Leaves the loop' : 'Comes into the loop'), a, b })),
+    ...[['Real', 'Nominal'], ['Nominal', 'Real'], ['Real', 'Nominal'], ['Nominal', 'Real']].map(([a, b]) => ({ d: 'real', lvl: 1, ask: 'Each line describes real GDP or nominal GDP. Three describe the same one. Tap the line that describes the other one.', why: `That line describes ${lower(b)} GDP. The other three describe ${lower(a)} GDP.`, label: (x) => x.t, group: (k) => REALNOM.filter((x) => x.key === k && short(x.t) && !/\b(pay|rate|raise)\b/i.test(x.t)), tag: (k) => `${k} GDP`, a, b })),
+    ...[['dis', 'de'], ['de', 'dis'], ['rising', 'de'], ['dis', 'rising'], ['rising', 'dis'], ['de', 'rising']].map(([a, b]) => ({ d: 'prices', lvl: 2, ask: `Each line is rising inflation, disinflation, or deflation. ${SAME}`, why: `That one is ${lower(B.BIN[b].label)}. The other three are ${lower(B.BIN[a].label)}.`, label: (x) => x.t, group: (k) => NAMEIT.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, note: binNote, a, b })),
+    ...[['expansion', 'contraction'], ['contraction', 'expansion'], ['expansion', 'contraction'], ['contraction', 'expansion']].map(([a, b]) => ({ d: 'cycle', lvl: 1, ask: 'Each line describes an expansion or a contraction. Three describe the same phase. Tap the line that describes the other phase.', why: `That line describes ${b === 'expansion' ? 'an expansion' : 'a contraction'}. The other three describe ${a === 'expansion' ? 'an expansion' : 'a contraction'}.`, label: (x) => x.t, group: (k) => PHASES.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, note: binNote, a, b })),
+    ...[['menu', 'shoe'], ['shoe', 'menu']].map(([a, b]) => ({ d: 'costs', lvl: 2, ask: `Each one is a menu cost or a shoe-leather cost of inflation. ${SAME}`, why: `That one is a ${b === 'menu' ? 'menu' : 'shoe-leather'} cost. The other three are ${a === 'menu' ? 'menu' : 'shoe-leather'} costs.`, label: (x) => x.t, group: (k) => COSTS.filter((x) => x.key === k && short(x.t)), tag: (k) => B.BIN[k].label, note: binNote, a, b })),
+    ...[['Elastic', 'Inelastic'], ['Inelastic', 'Elastic']].map(([a, b]) => ({ d: 'micro', lvl: 1, ask: `The price goes up. For each one, demand is elastic (buyers switch away) or inelastic (buyers keep buying). ${SAME}`, why: `Demand for that one is ${lower(b)}. Demand for the other three is ${lower(a)}.`, label: (x) => x.t, group: (k) => MICRO_ELASTIC.filter((x) => x.key === k && !/%/.test(x.t)), tag: (k) => k, note: (k) => (k === 'Elastic' ? 'Elastic: buyers can switch away' : 'Inelastic: buyers keep buying'), a, b })),
   ];
   const oddRecs = ODD.filter((o) => o.group(o.a).length >= 3 && o.group(o.b).length >= 1).map((o, i) => Object.assign({ k: `o${i}` }, o));
   eachDesk(oddRecs, 'odd', 'oddone', (x, r) => {
     const three = shuffle(r, x.group(x.a)).slice(0, 3);
     const odd = pickOne(r, x.group(x.b));
     const all = shuffle(r, three.concat([odd]));
-    const options = all.map((rec) => ({ label: x.label(rec), tag: rec === odd ? x.tag(x.b) : x.tag(x.a) }));
-    return fin({ desk: x.d, verb: 'oddone', lvl: x.lvl, order: 'ODD ONE OUT', ask: x.ask || 'Three go together. Tap the one that does not.', options, answer: all.indexOf(odd), why: x.why || `That one is ${x.tag(x.b)}. The other three are ${x.tag(x.a)}.` }, options.map((o) => o.label));
+    const options = all.map((rec) => { const k = rec === odd ? x.b : x.a; return { label: x.label(rec), tag: x.tag(k), note: x.note ? x.note(k) : x.tag(k) }; });
+    return fin({ desk: x.d, verb: 'oddone', lvl: x.lvl, order: 'WHICH ONE IS DIFFERENT?', ask: x.ask, options, answer: all.indexOf(odd), why: x.why }, options.map((o) => o.label));
   });
 
   /* ================= tap the wave: anywhere on the curve, no markers ================= */
@@ -450,6 +465,144 @@
     const options = FLOW_SPOTS.map((label) => ({ label }));
     return finish({ desk: 'gdp', verb: 'label', lvl: 2, diagram: 'flow', order: 'LABEL THE LOOP', ask: 'Name each lit part of the circular flow.', options, steps: spots.map((s) => ({ spot: s, answer: s })), why: 'Inner loop: real things. Outer loop: money. Top: product market. Bottom: factor market.' });
   });
+
+  /* ================= more graphs (Nov 17, 2026) =================
+     Three new pictures, all under the chart verb, so the clock, the pay, and the keys are the ones students know.
+     - ppc: the production possibilities curve from Unit 1, read as Unit 2 reads it. On the curve is potential real GDP,
+       inside it is a recession, and only growth moves the curve. After the answer the curve shifts or the dot moves.
+     - sd: supply and demand from Unit 1. A price ceiling or floor to read, and a curve that shifts after the answer.
+     - line: the inflation rate as a line. A falling line is not falling prices.
+     Every key below is computed from the numbers in the record, and bank.test.js computes it again its own way. */
+  const graphTask = (t, more) => { fin(t, t.options.map((o) => o.label)); t.clock = Math.round((t.clock + (more || 5)) * 10) / 10; return t; };
+  const PPC_LAYOUTS = [
+    { k: 'a', on: 52, inside: [0.44, 0.42], outside: [0.90, 0.74] },
+    { k: 'b', on: 28, inside: [0.32, 0.56], outside: [0.74, 0.88] },
+    { k: 'c', on: 66, inside: [0.58, 0.30], outside: [0.92, 0.66] },
+  ];
+  const PPC_ASKS = [
+    { k: 'rec', prop: 'inside', lvl: 1, order: 'TAP THE RECESSION', ask: 'The curve is what the economy can make at full employment. Tap the point that shows a recession.', y: 'Inside the curve, workers and plants sit idle. Actual real GDP is below potential.' },
+    { k: 'cyc', prop: 'inside', lvl: 2, order: 'TAP CYCLICAL UNEMPLOYMENT', ask: 'The curve is what the economy can make at full employment. Tap the point with cyclical unemployment.', y: 'Cyclical unemployment means idle workers, so output is inside the curve.' },
+    { k: 'full', prop: 'on', lvl: 2, order: 'TAP FULL EMPLOYMENT', ask: 'Tap the point where actual real GDP equals potential real GDP.', y: 'On the curve, the economy is at full employment. Unemployment equals the natural rate.' },
+    { k: 'out', prop: 'outside', lvl: 2, order: 'TAP THE POINT OUT OF REACH', ask: 'Tap the point the economy cannot reach until the curve shifts out.', y: 'Outside the curve takes more resources or better technology.' },
+    { k: 'gap', prop: 'inside', lvl: 3, order: 'TAP THE NEGATIVE GAP', ask: 'The curve is potential real GDP. Tap the point with a negative output gap.', y: 'A negative gap means actual real GDP is below potential. That is inside the curve.' },
+    { k: 'nat', prop: 'on', lvl: 3, order: 'TAP THE NATURAL RATE', ask: 'Tap the point where unemployment equals the natural rate.', y: 'At the natural rate there is no cyclical unemployment, so the economy is on the curve.' },
+  ];
+  const rad = (deg) => deg * Math.PI / 180;
+  const ppcPoints = (L) => [
+    { where: 'inside', x: L.inside[0], y: L.inside[1] },
+    { where: 'on', x: Math.cos(rad(L.on)), y: Math.sin(rad(L.on)) },
+    { where: 'outside', x: L.outside[0], y: L.outside[1] },
+  ];
+  const ppcTapRecs = [];
+  PPC_ASKS.forEach((a) => PPC_LAYOUTS.forEach((L) => ppcTapRecs.push({ k: a.k + '-' + L.k, lvl: a.lvl, a, L })));
+  kind('ppc-tap', 'cycle', 'chart', ppcTapRecs, (x, r) => {
+    const pts = shuffle(r, ppcPoints(x.L));
+    return finish({
+      desk: 'cycle', verb: 'chart', lvl: x.a.lvl, order: x.a.order, ask: x.a.ask,
+      chart: { kind: 'ppc', points: pts, pickOne: true, prop: x.a.prop },
+      options: pts.map((p, i) => ({ label: 'Point ' + (i + 1) })), answer: pts.findIndex((p) => p.where === x.a.prop), why: x.a.y,
+    });
+  });
+
+  /* curve: 'out', 'in', or null. dot: where the economy starts and, when the curve stays put, where it ends up. */
+  const PPC_MOVES = [
+    { k: 'layoffs', lvl: 2, t: 'A recession hits. Firms lay off workers and idle their plants.', curve: null, from: 'on', to: 'inside', y: 'The workers and plants still exist, so the curve stays. The economy moves to a point inside it.' },
+    { k: 'rehire', lvl: 2, t: 'The recession ends. Laid-off workers are hired back.', curve: null, from: 'inside', to: 'on', y: 'Idle workers go back to work. The economy moves back to the same curve.' },
+    { k: 'cyclical', lvl: 3, t: 'Cyclical unemployment rises from 0% to 3%.', curve: null, from: 'on', to: 'inside', y: 'More idle workers means less output from the same resources. A move inside the curve, not a shift.' },
+    { k: 'natural', lvl: 3, t: 'Unemployment falls from 8% back to the natural rate of 5%.', curve: null, from: 'inside', to: 'on', y: 'The economy returns to full employment. It moves back to the curve it already had.' },
+    { k: 'tech', lvl: 1, t: 'New technology lets every worker make more.', curve: 'out', from: 'on', y: 'More output from the same resources. Potential real GDP rises.' },
+    { k: 'capital', lvl: 2, t: 'Firms build many new factories and machines.', curve: 'out', from: 'on', y: 'More capital means the economy can make more. Potential real GDP rises.' },
+    { k: 'school', lvl: 2, t: 'Workers get more education and training.', curve: 'out', from: 'on', y: 'More skilled workers can make more. Potential real GDP rises.' },
+    { k: 'laborforce', lvl: 2, t: 'The labor force grows by two million workers.', curve: 'out', from: 'on', y: 'More workers means more can be made. Potential real GDP rises.' },
+    { k: 'storm', lvl: 1, t: 'A hurricane destroys factories, roads, and ports.', curve: 'in', from: 'on', y: 'With less capital, the economy can make less. Potential real GDP falls.' },
+    { k: 'shrink', lvl: 3, t: 'The working-age population shrinks for a decade.', curve: 'in', from: 'on', y: 'Fewer workers means less can be made. Potential real GDP falls.' },
+  ];
+  const PPC_OPTS = ['Shifts out', 'Shifts in', 'No shift'];
+  kind('ppc-move', 'cycle', 'chart', PPC_MOVES, (x) => graphTask({
+    desk: 'cycle', verb: 'chart', lvl: x.lvl, order: 'DOES THE PPC SHIFT?', text: x.t,
+    chart: { kind: 'ppc', dot: x.from, to: x.to || null, curve: x.curve },
+    options: PPC_OPTS.map((label) => ({ label })), answer: x.curve === 'out' ? 0 : x.curve === 'in' ? 1 : 2, why: x.y,
+  }));
+
+  /* Supply and demand. Demand is P = 10 - Q and supply is P = Q, so equilibrium is at 5 and 5. */
+  const SD_EQ = 5;
+  const SD_CONTROLS = [
+    { k: 'rent', lvl: 1, type: 'ceiling', p: 3, t: 'Apartments. The town sets the price ceiling on the graph.' },
+    { k: 'tickets', lvl: 2, type: 'ceiling', p: 7, t: 'Concert tickets. The law sets the price ceiling on the graph.' },
+    { k: 'gas', lvl: 1, type: 'ceiling', p: 3.5, t: 'Gasoline. The state sets the price ceiling on the graph.' },
+    { k: 'wheat', lvl: 1, type: 'floor', p: 7, t: 'Wheat. The government sets the price floor on the graph.' },
+    { k: 'milk', lvl: 2, type: 'floor', p: 3, t: 'Milk. The government sets the price floor on the graph.' },
+    { k: 'sugar', lvl: 1, type: 'floor', p: 6.5, t: 'Sugar. The government sets the price floor on the graph.' },
+    { k: 'minwage', lvl: 2, type: 'floor', p: 7, labor: true, t: 'Summer jobs. The minimum wage is the price floor on the graph.' },
+    { k: 'minwage2', lvl: 2, type: 'floor', p: 3.5, labor: true, t: 'Tutors. The minimum wage is the price floor on the graph.' },
+  ];
+  const sdControlKey = (c) => (c.type === 'ceiling' ? (c.p < SD_EQ ? 'Shortage' : 'No effect') : (c.p > SD_EQ ? 'Surplus' : 'No effect'));
+  const sdControlWhy = (c) => {
+    const key = sdControlKey(c);
+    if (key === 'Shortage') return 'The ceiling is below equilibrium, so it binds. Buyers want more than sellers offer. A shortage.';
+    if (key === 'Surplus') return c.labor ? 'The floor is above the equilibrium wage, so it binds. More people want jobs than firms will hire. A surplus of labor.' : 'The floor is above equilibrium, so it binds. Sellers offer more than buyers want. A surplus.';
+    return c.type === 'ceiling' ? 'The ceiling is above equilibrium, so it does not bind. The market stays at equilibrium.' : 'The floor is below equilibrium, so it does not bind. The market stays at equilibrium.';
+  };
+  kind('sd-control', 'micro', 'chart', SD_CONTROLS, (x) => {
+    const options = plain('Shortage', 'Surplus', 'No effect');
+    return graphTask({
+      desk: 'micro', verb: 'chart', lvl: x.lvl, order: 'FLASHBACK: READ THE GRAPH', text: x.t,
+      chart: { kind: 'sd', control: { type: x.type, p: x.p }, labor: !!x.labor },
+      options, answer: options.findIndex((o) => o.label === sdControlKey(x)), why: sdControlWhy(x),
+    });
+  });
+
+  /* c: which curve. d: +1 shifts right, -1 shifts left. The cause words match the Unit 1 list of shifters. */
+  const SD_SHIFTS = [
+    { k: 'meals', lvl: 1, c: 'D', d: 1, t: 'The market for restaurant meals, a normal good. Incomes rise in an expansion.', y: 'Higher income raises demand for a normal good.' },
+    { k: 'cars', lvl: 1, c: 'D', d: -1, t: 'The market for new cars, a normal good. A recession cuts incomes.', y: 'Lower income cuts demand for a normal good.' },
+    { k: 'tea', lvl: 2, c: 'D', d: 1, t: 'The market for tea. The price of coffee, a substitute, rises.', y: 'Buyers switch from coffee to tea.' },
+    { k: 'buns', lvl: 2, c: 'D', d: -1, t: 'The market for hot dog buns. The price of hot dogs, a complement, rises.', y: 'Fewer hot dogs sold means fewer buns wanted.' },
+    { k: 'sneakers', lvl: 3, c: 'D', d: 1, t: 'The market for sneakers today. Buyers expect the price to jump next month.', y: 'Buyers rush to buy before the price rises.' },
+    { k: 'flour', lvl: 1, c: 'S', d: -1, t: 'The market for bagels. The price of flour rises.', y: 'A higher input cost cuts supply.' },
+    { k: 'ovens', lvl: 1, c: 'S', d: 1, t: 'The market for bagels. New ovens bake twice as many an hour.', y: 'Better technology raises supply.' },
+    { k: 'frost', lvl: 1, c: 'S', d: -1, t: 'The market for oranges. A frost kills part of the crop.', y: 'Less can be brought to market at every price.' },
+    { k: 'shops', lvl: 2, c: 'S', d: 1, t: 'The market for pizza. Five new pizza shops open in town.', y: 'More sellers means more supply.' },
+    { k: 'wages', lvl: 2, c: 'S', d: -1, t: 'The market for bicycles. The wage paid to bicycle factory workers rises.', y: 'A higher input cost cuts supply.' },
+  ];
+  const SD_SHIFT_OPTS = ['Demand shifts right', 'Demand shifts left', 'Supply shifts right', 'Supply shifts left'];
+  const sdShiftResult = (x) => {
+    const up = x.c === 'D' ? x.d > 0 : x.d < 0;          // price rises when demand rises or supply falls
+    const more = x.d > 0;                                 // quantity follows the direction of the shift
+    return `${x.c === 'D' ? 'Demand' : 'Supply'} shifts ${x.d > 0 ? 'right' : 'left'}. Price ${up ? 'rises' : 'falls'} and quantity ${more ? 'rises' : 'falls'}.`;
+  };
+  kind('sd-shift', 'micro', 'chart', SD_SHIFTS, (x) => graphTask({
+    desk: 'micro', verb: 'chart', lvl: x.lvl, order: 'FLASHBACK: WHICH CURVE SHIFTS?', text: x.t,
+    chart: { kind: 'sd', shift: { c: x.c, d: x.d } },
+    options: SD_SHIFT_OPTS.map((label) => ({ label })), answer: (x.c === 'D' ? 0 : 2) + (x.d > 0 ? 0 : 1), why: `${x.y} ${sdShiftResult(x)}`,
+  }));
+
+  /* The inflation rate as a line, one point a year. Each ask is used only where exactly one year fits. */
+  const INFL_LINES = [
+    { k: 'fall', vals: [6, 5, 4, 3, 2] },
+    { k: 'hump', vals: [2, 4, 7, 5, 3] },
+    { k: 'dip', vals: [3, 4, 2, -2, 1] },
+    { k: 'late', vals: [1, 2, 3, 5, -1] },
+    { k: 'slow', vals: [8, 6, 4, 3, 1] },
+    { k: 'wob', vals: [2, 3, 1, 4, 6] },
+  ];
+  const priceLevels = (vals) => { let p = 100; return vals.map((v) => (p *= 1 + v / 100)); };
+  const only = (list) => (list.length === 1 ? list[0] : -1);
+  const idxWhere = (vals, f) => vals.map((v, i) => (f(v, i) ? i : -1)).filter((i) => i >= 0);
+  const INFL_ASKS = [
+    { k: 'fastest', lvl: 1, order: 'TAP THE FASTEST PRICE RISE', ask: 'The line is the inflation rate. Tap the year prices rose fastest.', pick: (v) => only(idxWhere(v, (x) => x === Math.max(...v))), y: () => 'The highest point on the line is the highest inflation rate.' },
+    { k: 'deflation', lvl: 1, order: 'TAP THE YEAR PRICES FELL', ask: 'The line is the inflation rate. Tap the year the price level fell.', pick: (v) => only(idxWhere(v, (x) => x < 0)), y: () => 'Prices fall only when the inflation rate is below zero. That is deflation.' },
+    { k: 'dis', lvl: 2, order: 'TAP THE DISINFLATION YEAR', ask: 'The line is the inflation rate. Disinflation: the rate falls but stays above zero.', pick: (v) => only(idxWhere(v, (x, i) => i > 0 && x > 0 && x < v[i - 1])), y: () => 'The rate fell but stayed above zero. Prices still rose, just more slowly.' },
+    { k: 'level', lvl: 3, order: 'TAP THE HIGHEST PRICE LEVEL', ask: 'The line is the inflation rate. Tap the year the price level was highest.', pick: (v) => { const p = priceLevels(v), top = Math.max(...p); return only(idxWhere(p, (x) => top - x < 0.05)); }, y: (v, a) => (v.every((x) => x > 0) ? `The rate stayed above zero, so prices rose every year.${v[v.length - 1] < Math.max(...v) ? ' A falling line is not falling prices.' : ' The last year is the highest.'}` : a === v.length - 1 ? 'Prices rose in every year but one, and ended at their highest.' : `Prices rose through Year ${a + 1}, then fell in Year ${a + 2}.${a + 2 < v.length ? ' The rise after that did not make up for the fall.' : ''}`) },
+  ];
+  const inflRecs = [];
+  INFL_ASKS.forEach((a) => INFL_LINES.forEach((L) => { const ans = a.pick(L.vals); if (ans >= 0) inflRecs.push({ k: a.k + '-' + L.k, lvl: a.lvl, a, L, ans }); }));
+  kind('infl-line', 'prices', 'chart', inflRecs, (x) => graphTask({
+    desk: 'prices', verb: 'chart', lvl: x.a.lvl, order: x.a.order, ask: x.a.ask,
+    chart: { kind: 'line', pts: x.L.vals.map((v, i) => ({ label: 'Year ' + (i + 1), v })), suf: '%', pickOne: true, prop: x.a.k },
+    options: x.L.vals.map((v, i) => ({ label: 'Year ' + (i + 1) })), answer: x.ans, why: x.a.y(x.L.vals, x.ans),
+  }, x.a.k === 'level' ? 8 : 1));
+  B.GRAPHS = { PPC_LAYOUTS, PPC_ASKS, PPC_MOVES, SD_EQ, SD_CONTROLS, SD_SHIFTS, INFL_LINES };
 
   if (inNode) module.exports = B;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
